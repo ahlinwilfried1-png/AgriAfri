@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
-import { Product, ProductCategory } from '../types';
+import { Product, ProductCategory, checkProductOpen } from '../types';
 import {
   Sprout,
   CheckCircle,
@@ -60,16 +60,30 @@ export const ProductsView: React.FC = () => {
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState('');
+
+  useEffect(() => {
+    const updateTime = () => {
+      if (settings?.simulatedTime) {
+        setCurrentTime(settings.simulatedTime);
+        return;
+      }
+      const now = new Date();
+      setCurrentTime(`${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`);
+    };
+    updateTime();
+    const interval = setInterval(updateTime, 4000);
+    return () => clearInterval(interval);
+  }, [settings?.simulatedTime]);
 
   const isRuleActive = settings?.requireStabilityToUnlockOthers ?? false;
   const hasActiveStability = currentUser
     ? investments.some((inv) => inv.userId === currentUser.id && inv.category === 'STABILITÉ' && inv.status === 'ACTIVE')
     : false;
 
+  // We no longer lock any categories visually. They remain fully visible and open.
   const isCategoryLocked = (cat: ProductCategory) => {
-    if (!isRuleActive) return false;
-    if (cat === 'STABILITÉ') return false;
-    return !hasActiveStability;
+    return false;
   };
 
   // Filter products by selected vertical category
@@ -84,6 +98,26 @@ export const ProductsView: React.FC = () => {
       month: 'long',
       year: 'numeric',
     });
+  };
+
+  const handleInvestClick = (prod: Product) => {
+    if (isRuleActive && prod.category !== 'STABILITÉ' && !hasActiveStability) {
+      alert("Veuillez d'abord activer un produit de la catégorie Stabilité pour continuer.");
+      return;
+    }
+    if (prod.category !== 'STABILITÉ') {
+      const liveTimeStr = settings?.simulatedTime && settings.simulatedTime.trim() !== ''
+        ? settings.simulatedTime.trim()
+        : new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      const status = checkProductOpen(prod, liveTimeStr);
+      if (!status.isOpen) {
+        alert(status.reason);
+        return;
+      }
+    }
+    setErrorMessage(null);
+    setSuccessMessage(null);
+    setSelectedProduct(prod);
   };
 
   const handleInvestSubmit = () => {
@@ -260,11 +294,7 @@ export const ProductsView: React.FC = () => {
                     <div
                       id={`product-card-${prod.id}`}
                       key={prod.id}
-                      className={`bg-white border rounded-3xl overflow-hidden shadow-2xs transition-all duration-300 flex flex-col md:flex-row md:items-stretch ${
-                        lockedCategory
-                          ? 'opacity-40 grayscale select-none pointer-events-none border-rose-100 bg-slate-50/50'
-                          : 'border-slate-200/80 hover:border-emerald-500 hover:shadow-xs'
-                      }`}
+                      className="bg-white border rounded-3xl overflow-hidden shadow-2xs transition-all duration-300 flex flex-col md:flex-row md:items-stretch border-slate-200/80 hover:border-emerald-500 hover:shadow-xs"
                     >
                       {/* Product Visual Area Header (left side on desktop, top on mobile) */}
                       <div className={`relative h-32 md:h-auto md:w-56 bg-gradient-to-br ${getCoverGradient(prod.id, prod.category)} flex flex-col justify-end p-4 text-white overflow-hidden shrink-0`}>
@@ -315,29 +345,50 @@ export const ProductsView: React.FC = () => {
                         </div>
 
                         {/* Invest Footer Controls */}
-                        <div className="border-t border-slate-50 pt-3 flex items-center justify-between gap-1.5 mt-auto">
-                          <div className="text-left">
-                            <p className="text-[8px] text-slate-400 font-sans font-bold uppercase">BÉNÉFICE NET</p>
-                            <p className="text-[11px] font-black font-mono text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100/30">
-                              +{(prod.totalRevenue - prod.price).toLocaleString()} FCFA
-                            </p>
+                        <div className="border-t border-slate-50 pt-3 flex flex-col gap-2 mt-auto">
+                          {prod.category !== 'STABILITÉ' && (() => {
+                            const liveTimeStr = settings?.simulatedTime && settings.simulatedTime.trim() !== ''
+                              ? settings.simulatedTime.trim()
+                              : new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                            const status = checkProductOpen(prod, liveTimeStr);
+                            return (
+                              <div className={`text-[10px] py-1 px-2.5 rounded-xl font-sans font-bold flex items-center justify-between border ${
+                                status.isOpen 
+                                  ? 'bg-emerald-55 border-emerald-100/50 text-emerald-800' 
+                                  : 'bg-rose-50 border-rose-100 text-rose-800'
+                              }`}>
+                                <span className="flex items-center gap-1">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${status.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
+                                  Période de vente :
+                                </span>
+                                <span className={status.isOpen ? 'text-emerald-700' : 'text-rose-700'}>
+                                  {status.isOpen ? 'Ouvert ' + (prod.closingTime ? `(ferme à ${prod.closingTime})` : prod.availabilityDurationMinutes ? `(ferme sous ${prod.availabilityDurationMinutes} min)` : '') : status.reason}
+                                </span>
+                              </div>
+                            );
+                          })()}
+
+                          <div className="flex items-center justify-between gap-1.5">
+                            <div className="text-left">
+                              <p className="text-[8px] text-slate-400 font-sans font-bold uppercase">BÉNÉFICE NET</p>
+                              <p className="text-[11px] font-black font-mono text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100/30">
+                                +{(prod.totalRevenue - prod.price).toLocaleString()} FCFA
+                              </p>
+                            </div>
+                            <button
+                              id={`btn-invest-prod-${prod.id}`}
+                              onClick={() => handleInvestClick(prod)}
+                              className={`py-2 px-6 select-none shrink-0 font-sans font-extrabold text-xs rounded-xl flex items-center justify-center transition-all shadow-xs text-white cursor-pointer ${
+                                prod.category === 'STABILITÉ'
+                                  ? 'bg-emerald-600 hover:bg-emerald-700'
+                                  : prod.category === 'BIEN-ÊTRE'
+                                  ? 'bg-rose-600 hover:bg-rose-700'
+                                  : 'bg-amber-600 hover:bg-amber-700'
+                              }`}
+                            >
+                              Investir
+                            </button>
                           </div>
-                          <button
-                            id={`btn-invest-prod-${prod.id}`}
-                            disabled={lockedCategory}
-                            onClick={() => setSelectedProduct(prod)}
-                            className={`py-2 px-6 select-none shrink-0 font-sans font-extrabold text-xs rounded-xl flex items-center justify-center transition-all shadow-xs ${
-                              lockedCategory
-                                ? 'bg-slate-200 text-slate-400 cursor-not-allowed opacity-60 line-through'
-                                : prod.category === 'STABILITÉ'
-                                ? 'bg-emerald-600 hover:bg-emerald-700 text-white cursor-pointer'
-                                : prod.category === 'BIEN-ÊTRE'
-                                ? 'bg-rose-600 hover:bg-rose-700 text-white cursor-pointer'
-                                : 'bg-amber-600 hover:bg-amber-700 text-white cursor-pointer'
-                            }`}
-                          >
-                            {lockedCategory ? '🔒 Verrouillé' : 'Investir'}
-                          </button>
                         </div>
                       </div>
                     </div>

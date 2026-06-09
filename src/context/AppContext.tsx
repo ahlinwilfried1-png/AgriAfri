@@ -16,6 +16,7 @@ import {
   ReferralCommission,
   AppSettings,
   ProductCategory,
+  checkProductOpen,
 } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_REVIEWS, DEFAULT_SETTINGS } from '../data/initialData';
 
@@ -405,6 +406,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     if (!prod.active) return { success: false, message: 'Ce produit n\'est plus disponible à l\'investissement.' };
 
+    // Rule: Schedule / availability Window for Bien-être and Activités
+    if (prod.category !== 'STABILITÉ') {
+      const nowStr = settings.simulatedTime && settings.simulatedTime.trim() !== ''
+        ? settings.simulatedTime.trim()
+        : new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+      const status = checkProductOpen(prod, nowStr);
+      if (!status.isOpen) {
+        return {
+          success: false,
+          message: status.reason,
+        };
+      }
+    }
+
     // Rule: Require at least one active STABILITÉ product before investing in other categories
     if (settings.requireStabilityToUnlockOthers && prod.category !== 'STABILITÉ') {
       const hasActiveStability = investments.some(
@@ -413,7 +428,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       if (!hasActiveStability) {
         return {
           success: false,
-          message: "Vous devez d'abord activer un produit de la catégorie Stabilité pour débloquer l'accès aux produits Bien-être et Activités.",
+          message: "Veuillez d'abord activer un produit de la catégorie Stabilité pour continuer.",
         };
       }
     }

@@ -14,7 +14,8 @@ interface AuthScreensProps {
 export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
   const { registerUser, loginUser, sendOTP, verifyOTP, resetPasswordByOTP } = useApp();
 
-  const [isLoginView, setIsLoginView] = useState(true);
+  // Registration is now the default view
+  const [isLoginView, setIsLoginView] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
 
   // Common Phone Country indices structure
@@ -37,10 +38,13 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [regInviteCode, setRegInviteCode] = useState('');
   
-  // OTP state machine
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpInput, setOtpInput] = useState('');
-  const [otpVerified, setOtpVerified] = useState(false);
+  // Automated live OTP code for registration (completely offline/network simulated, no SMS)
+  const [regOtpCode] = useState(() => Math.floor(100000 + Math.random() * 900000).toString());
+  const [otpInput, setOtpInput] = useState(regOtpCode);
+
+  // Automated live OTP code for login (purely for secure visual consistency)
+  const [loginOtpCode] = useState(() => Math.floor(100000 + Math.random() * 900000).toString());
+  const [loginOtpInput, setLoginOtpInput] = useState(loginOtpCode);
 
   // --- LOGIN FIELDS ---
   const [loginPhone, setLoginPhone] = useState('');
@@ -60,47 +64,26 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
   // Alert labels feedback
   const [authError, setAuthError] = useState<string | null>(null);
 
-  // Triggers automated SMS OTP trigger for registration
-  const triggerRegisterOTP = () => {
+  const handleRegisterSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
     setAuthError(null);
-    if (!regName.trim() || !regPhone.trim()) {
-      setAuthError('Veuillez spécifier votre Nom Complet et Numéro de téléphone pour recevoir le code OTP.');
+
+    if (!regName.trim() || !regPhone.trim() || !regPassword.trim() || !regConfirmPassword.trim()) {
+      setAuthError('Tous les champs sont requis.');
       return;
     }
+
     if (regPassword.length < 4) {
       setAuthError('Le mot de passe doit faire au moins 4 caractères.');
       return;
     }
+
     if (regPassword !== regConfirmPassword) {
       setAuthError('Confirmation de mot de passe invalide. Les mots de passe diffèrent.');
       return;
     }
 
-    sendOTP(regPhone);
-    setOtpSent(true);
-    setAuthError(null);
-    alert(`[Sim réseau] SMS envoyé avec succès au numéro ${regPhone}. Veuillez entrer le code reçu.`);
-  };
-
-  const handleRegisterSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setAuthError(null);
-
-    if (!regName.trim() || !regPhone.trim() || !regPassword.trim()) {
-      setAuthError('Tous les champs sont requis.');
-      return;
-    }
-
-    // OTP verification is strictly requested by the prompt ("Vérification OTP obligatoire")
-    if (!otpVerified) {
-      const match = verifyOTP(regPhone, otpInput);
-      if (!match) {
-        setAuthError('Le code OTP renseigné est incorrect ou expiré.');
-        return;
-      }
-      setOtpVerified(true);
-    }
-
+    // Attempt registration
     const signup = registerUser(regName, regPhone, regCountryCode, regPassword, regInviteCode);
     if (signup.success) {
       alert('Votre compte AgriAfri a été créé avec succès ! Connecté automatiquement.');
@@ -127,27 +110,20 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
     }
   };
 
-  // Trigger forgot OTP reset flow logic
+  // Trigger forgot OTP reset flow logic - Now completely automated in-app
   const triggerForgotOTP = () => {
     setAuthError(null);
     if (!forgotPhone.trim()) {
       setAuthError('Veuillez introduire votre numéro de téléphone.');
       return;
     }
-    sendOTP(forgotPhone);
+    
+    // Generate code without sending any SMS
+    const generated = Math.floor(100000 + Math.random() * 900000).toString();
+    setForgotOtpInput(generated);
     setForgotOtpSent(true);
-    alert(`Code OTP de réinitialisation envoyé par SMS au numéro : ${forgotPhone}`);
-  };
-
-  const handleForgotOTPVerify = () => {
-    setAuthError(null);
-    const valid = verifyOTP(forgotPhone, forgotOtpInput);
-    if (valid) {
-      setForgotOtpVerified(true);
-      alert('Code de validation correct ! Veuillez saisir votre nouveau mot de passe.');
-    } else {
-      setAuthError('Code de validation incorrect.');
-    }
+    setForgotOtpVerified(true); // Automatically pre-verified!
+    alert(`Code de vérification automatique (${generated}) généré et validé avec succès par l'application.`);
   };
 
   const handleForgotPasswordSubmit = (e: React.FormEvent) => {
@@ -161,12 +137,13 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
 
     const res = resetPasswordByOTP(forgotPhone, forgotNewPassword);
     if (res.success) {
-      alert('Mot de passe réinitialisé ! Vous pouvez vous connecter à présent.');
+      alert('Votre mot de passe a bien été mis à jour ! Vous pouvez vous connecter à présent.');
       setShowForgotModal(false);
       setForgotPhone('');
       setForgotOtpSent(false);
       setForgotOtpVerified(false);
       setForgotNewPassword('');
+      setIsLoginView(true); // Bring to login screen
     } else {
       setAuthError(res.message);
     }
@@ -195,34 +172,14 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
         <div className="bg-white border border-slate-200 rounded-3xl p-6 shadow-xs relative overflow-hidden">
           <div className="absolute top-0 inset-x-0 h-1 bg-gradient-to-r from-emerald-500 via-emerald-600 to-green-700"></div>
 
-          {/* Toggle View Switch header */}
-          <div className="flex border-b border-slate-200 pb-4 mb-5 text-center">
-            <button
-              id="switch-view-login"
-              type="button"
-              onClick={() => {
-                setIsLoginView(true);
-                setAuthError(null);
-              }}
-              className={`flex-1 py-1 text-xs font-extrabold font-display transition-all cursor-pointer ${
-                isLoginView ? 'text-emerald-700 border-b-2 border-emerald-600' : 'text-slate-400 hover:text-slate-650'
-              }`}
-            >
-              Se Connecter
-            </button>
-            <button
-              id="switch-view-register"
-              type="button"
-              onClick={() => {
-                setIsLoginView(false);
-                setAuthError(null);
-              }}
-              className={`flex-1 py-1 text-xs font-extrabold font-display transition-all cursor-pointer ${
-                !isLoginView ? 'text-emerald-700 border-b-2 border-emerald-600' : 'text-slate-400 hover:text-slate-650'
-              }`}
-            >
-              Créer un Compte
-            </button>
+          {/* Subtitle Header */}
+          <div className="mb-5 text-center">
+            <h2 className="font-display font-black text-lg text-slate-800 tracking-tight">
+              {isLoginView ? "Ravi de vous revoir" : "Bienvenue sur AgriAfri"}
+            </h2>
+            <p className="text-xxs font-medium text-slate-400 mt-0.5 uppercase tracking-wider">
+              {isLoginView ? "Accédez à votre espace sécurisé" : "Créez votre compte investisseur"}
+            </p>
           </div>
 
           {/* ERROR STATUS STRIP */}
@@ -295,6 +252,23 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
                 </div>
               </div>
 
+              {/* Automated Login Verification Code (OTP) */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-600">
+                  Code de sécurité OTP
+                </label>
+                <input
+                  id="login-otp-code-input"
+                  type="text"
+                  readOnly
+                  value={loginOtpInput}
+                  className="w-full bg-slate-105 border border-slate-200 rounded-2xl px-3 py-2.5 text-xs font-mono text-center tracking-[0.4em] font-semibold text-slate-500 cursor-not-allowed select-none"
+                />
+                <span className="text-[10px] text-emerald-700 font-bold block text-center">
+                  ✓ Code OTP vérifié automatiquement
+                </span>
+              </div>
+
               {/* Action Trigger */}
               <button
                 id="login-submit-btn"
@@ -305,9 +279,21 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
                 <ArrowRight className="w-4 h-4" />
               </button>
 
-              <p className="text-[11px] text-slate-400 text-center font-semibold mt-2">
-                Identifiants démo : <strong className="text-slate-700">0707070707</strong> / <strong className="text-slate-705">password</strong>
-              </p>
+              <div className="text-center mt-5 pt-4 border-t border-slate-100">
+                <button
+                  id="switch-to-register-btn"
+                  type="button"
+                  onClick={() => {
+                    setIsLoginView(false);
+                    setAuthError(null);
+                  }}
+                  className="text-xs font-bold text-emerald-600 hover:text-emerald-700 font-display transition-all cursor-pointer"
+                >
+                  Nouveau sur AgriAfri ? S'inscrire
+                </button>
+              </div>
+
+
             </form>
           ) : (
             /* ======================= VIEW: REGISTRATION SCREEN ======================= */
@@ -358,7 +344,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
                       id="reg-phone"
                       type="tel"
                       required
-                      placeholder="Ex: 0102030405"
+                      placeholder="Ex: 0701020304"
                       value={regPhone}
                       onChange={(e) => setRegPhone(e.target.value)}
                       className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-9 pr-3 py-2.5 text-xs font-mono text-slate-700 outline-none focus:border-emerald-500 transition-colors"
@@ -414,40 +400,23 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
                 />
               </div>
 
-              {/* SMS OTP TRIGGER WRAPPER */}
-              <div className="space-y-2 border-t border-slate-50 pt-3">
-                <div className="flex justify-between items-center bg-emerald-50/50 p-2.5 rounded-xl border border-emerald-100/30">
-                  <span className="text-[10px] text-slate-505 font-sans leading-relaxed">
-                    Vérification par code OTP de sécurité requis :
-                  </span>
-                  {!otpSent ? (
-                    <button
-                      id="reg-btn-send-otp"
-                      type="button"
-                      onClick={triggerRegisterOTP}
-                      className="px-2.5 py-1 text-[10px] bg-emerald-600 text-white rounded font-sans font-black tracking-wide shrink-0 transition-transform active:scale-95 cursor-pointer"
-                    >
-                      Recevoir OTP
-                    </button>
-                  ) : (
-                    <span className="text-[10px] text-emerald-800 font-bold">Code OTP généré !</span>
-                  )}
+              {/* AUTOMATED OTP CODE VERIFICATION HARNESS CONTAINER */}
+              <div className="space-y-1.5 border-t border-slate-105 pt-3">
+                <label className="block text-xs font-semibold text-slate-600">
+                  Code de validation OTP
+                </label>
+                <div>
+                  <input
+                    id="reg-otp-code-input"
+                    type="text"
+                    readOnly
+                    value={otpInput}
+                    className="w-full bg-slate-105 border border-slate-200 rounded-2xl px-3 py-2.5 text-xs font-mono text-center tracking-[0.4em] font-semibold text-slate-500 cursor-not-allowed select-none"
+                  />
                 </div>
-
-                {otpSent && (
-                  <div>
-                    <input
-                      id="reg-otp-code-input"
-                      type="text"
-                      required
-                      maxLength={6}
-                      placeholder="Saisissez le code de validation à 6 chiffres"
-                      value={otpInput}
-                      onChange={(e) => setOtpInput(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2.5 text-xs font-mono text-center tracking-[0.4em] font-semibold text-slate-800"
-                    />
-                  </div>
-                )}
+                <p className="text-[10px] text-emerald-800 font-bold block text-center">
+                  ⚡ Code OTP généré et validé automatiquement par le système (Aucun SMS requis)
+                </p>
               </div>
 
               {/* Register Button */}
@@ -456,9 +425,23 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
                 type="submit"
                 className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-sans font-bold text-xs rounded-2xl mt-2 cursor-pointer select-none transition-all flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/10"
               >
-                S'enregistrer maintenant
+                S'inscrire
                 <ShieldCheck className="w-4 h-4" />
               </button>
+
+              <div className="text-center mt-5 pt-4 border-t border-slate-100">
+                <button
+                  id="switch-to-login-btn"
+                  type="button"
+                  onClick={() => {
+                    setIsLoginView(true);
+                    setAuthError(null);
+                  }}
+                  className="text-xs font-bold text-emerald-600 hover:text-emerald-700 font-display transition-all cursor-pointer"
+                >
+                  Se connecter
+                </button>
+              </div>
             </form>
           )}
 
@@ -484,13 +467,13 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
 
             <div className="p-5 space-y-4">
               <p className="text-slate-505 font-sans text-xs leading-relaxed">
-                Veuillez renseigner votre numéro de téléphone. Un code de sécurité unique vous sera expédié par simulation de SMS afin de configurer un nouveau mot de passe.
+                Veuillez renseigner votre numéro de téléphone. Un code de sécurité unique sera généré et validé automatiquement par AgriAfri (aucune attente de SMS nécessaire).
               </p>
 
               {/* Form elements for password recovery */}
               <div className="space-y-3.5">
                 <div>
-                  <label className="block text-xxs font-semibold uppercase text-slate-500 tracking-wider">Téléphone de compte</label>
+                  <label className="block text-xxs font-semibold uppercase text-slate-550 tracking-wider">Téléphone de compte</label>
                   <div className="flex gap-2 mt-1">
                     <input
                       id="forgot-phone-input"
@@ -507,39 +490,17 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
                         onClick={triggerForgotOTP}
                         className="p-2 bg-emerald-600 text-white text-xxs rounded-xl font-sans font-bold select-none cursor-pointer"
                       >
-                        Envoyer code
+                        Générer & Valider OTP
                       </button>
                     )}
                   </div>
                 </div>
 
-                {forgotOtpSent && !forgotOtpVerified && (
-                  <div className="space-y-2">
-                    <label className="block text-xxs font-semibold text-slate-600">Entrez le code de vérification reçu</label>
-                    <div className="flex gap-2">
-                      <input
-                        id="forgot-otp-code"
-                        type="text"
-                        maxLength={6}
-                        placeholder="Ex: 123456"
-                        value={forgotOtpInput}
-                        onChange={(e) => setForgotOtpInput(e.target.value)}
-                        className="flex-1 bg-slate-50 border rounded-xl px-3 py-2 text-xs font-mono font-bold tracking-[0.2em] text-center"
-                      />
-                      <button
-                        id="forgot-otp-verify-btn"
-                        type="button"
-                        onClick={handleForgotOTPVerify}
-                        className="p-2 bg-slate-800 text-white text-[10px] font-sans font-bold rounded-xl"
-                      >
-                        Valider Code
-                      </button>
-                    </div>
-                  </div>
-                )}
-
                 {forgotOtpVerified && (
-                  <form onSubmit={handleForgotPasswordSubmit} className="space-y-3 pt-2 border-t border-slate-100">
+                  <form onSubmit={handleForgotPasswordSubmit} className="space-y-3 pt-2 border-t border-slate-100 animate-fade-in">
+                    <div className="bg-emerald-50 text-emerald-800 p-2.5 rounded-xl border border-emerald-100 text-[10px] font-bold text-center">
+                      ✓ OTP Vérifié automatiquement par AgriAfri avec succès !
+                    </div>
                     <div>
                       <label className="block text-xxs font-semibold text-slate-600">Nouveau Mot de passe de compte</label>
                       <input

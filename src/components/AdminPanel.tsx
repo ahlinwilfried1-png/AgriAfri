@@ -726,6 +726,89 @@ export const AdminPanel: React.FC = () => {
                   </div>
                 </div>
 
+                {/* Advanced Programming Section for BIEN-ÊTRE & ACTIVITÉS categories */}
+                {p.category !== 'STABILITÉ' && (
+                  <div className="bg-slate-50 border border-slate-205 rounded-2xl p-4.5 space-y-3 mt-2 text-xs">
+                    <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-1.5 pb-2 border-b border-slate-200/50">
+                      <span className="font-sans font-black text-slate-800 uppercase text-[9px] tracking-widest flex items-center gap-1">
+                        ⚙️ Programmation & Période d'achat ({p.category})
+                      </span>
+                      <span className="font-sans text-[10px] font-bold text-slate-600 bg-slate-200/60 px-2 py-0.5 rounded-lg">
+                        Investisseurs : <strong className="text-emerald-700 font-mono">{investments.filter(inv => inv.productId === p.id).length}</strong>
+                      </span>
+                    </div>
+
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                      <div>
+                        <label className="block text-[9px] font-extrabold text-slate-500 uppercase tracking-wider">H. d'ouverture (ex: 10:00)</label>
+                        <input 
+                          type="text" 
+                          placeholder="HH:MM" 
+                          value={p.openingTime || ''} 
+                          onChange={(e) => updateProduct(p.id, { openingTime: e.target.value || undefined })}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-mono mt-1 text-slate-700 outline-none focus:border-emerald-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-extrabold text-slate-500 uppercase tracking-wider">H. de fermeture (ex: 10:10)</label>
+                        <input 
+                          type="text" 
+                          placeholder="HH:MM" 
+                          value={p.closingTime || ''} 
+                          onChange={(e) => updateProduct(p.id, { closingTime: e.target.value || undefined })}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs font-mono mt-1 text-slate-700 outline-none focus:border-rose-500"
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-[9px] font-extrabold text-slate-500 uppercase tracking-wider">Durée (en minutes)</label>
+                        <input 
+                          type="number" 
+                          placeholder="Ex: 10" 
+                          value={p.availabilityDurationMinutes || ''} 
+                          onChange={(e) => updateProduct(p.id, { availabilityDurationMinutes: e.target.value ? Number(e.target.value) : undefined })}
+                          className="w-full bg-white border border-slate-200 rounded-xl px-2.5 py-1.5 text-xs mt-1 text-slate-705 outline-none focus:border-amber-500"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Manual Controls */}
+                    <div className="flex flex-wrap items-center gap-2 pt-1 border-t border-slate-100 mt-2.5">
+                      <span className="text-[9px] text-slate-400 font-extrabold uppercase mr-1">Disponibilité manuelle :</span>
+                      <button
+                        type="button"
+                        onClick={() => updateProduct(p.id, { manualOpened: true, manualClosed: false })}
+                        className={`px-3 py-1 rounded-xl text-[10px] font-extrabold transition-all border shrink-0 cursor-pointer ${
+                          p.manualOpened 
+                            ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs' 
+                            : 'bg-white hover:bg-slate-100 text-emerald-800 border-emerald-150'
+                        }`}
+                      >
+                        ✓ Ouvrir manuellement
+                      </button>
+                      <button
+                        type="button"
+                        onClick={() => updateProduct(p.id, { manualClosed: true, manualOpened: false })}
+                        className={`px-3 py-1 rounded-xl text-[10px] font-extrabold transition-all border shrink-0 cursor-pointer ${
+                          p.manualClosed 
+                            ? 'bg-rose-600 text-white border-rose-600 shadow-xs' 
+                            : 'bg-white hover:bg-slate-100 text-rose-800 border-rose-150'
+                        }`}
+                      >
+                        ✕ Fermer manuellement
+                      </button>
+                      {(p.manualOpened || p.manualClosed) && (
+                        <button
+                          type="button"
+                          onClick={() => updateProduct(p.id, { manualOpened: false, manualClosed: false })}
+                          className="px-2.5 py-1 bg-slate-105 hover:bg-slate-200 text-slate-600 border border-slate-200 rounded-xl text-[10px] font-extrabold transition-all cursor-pointer"
+                        >
+                          Réinitialiser
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                )}
+
                 {/* CRUD Controls */}
                 <div className="flex justify-end gap-1 text-nowrap pt-2.5 border-t border-slate-50">
                   <button
@@ -914,6 +997,35 @@ export const AdminPanel: React.FC = () => {
                   />
                   <div className="w-10 h-6 bg-slate-205 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-emerald-600"></div>
                 </label>
+              </div>
+            </div>
+
+            {/* Simulated Time Field */}
+            <div className="bg-amber-50/50 border border-amber-200/60 rounded-2xl p-4.5 space-y-2">
+              <h4 className="text-xs font-sans font-black text-amber-950 flex items-center gap-1.5 uppercase tracking-wider">
+                ⏰ Simulation de l'heure du système (Tests de Programmation)
+              </h4>
+              <p className="text-[11px] text-amber-900 leading-relaxed font-semibold">
+                Saisissez une heure spécifique pour tester les ouvertures et fermetures automatiques des produits Bien-être et Activités (ex: "10:05"). Laissez vide pour utiliser l'heure réelle en temps réel du navigateur.
+              </p>
+              <div>
+                <input
+                  id="settings-simulated-time"
+                  type="text"
+                  placeholder="HH:MM (Laissez vide pour l'heure réelle)"
+                  value={settings.simulatedTime || ''}
+                  onChange={(e) => updateSettings({ simulatedTime: e.target.value || undefined })}
+                  className="w-full bg-white border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono text-slate-705 outline-none"
+                />
+                {settings.simulatedTime ? (
+                  <span className="text-[10px] text-amber-800 font-bold block mt-1.5">
+                    ⚠️ Mode simulé actif : l'heure globale est bloquée à <strong className="text-slate-800">{settings.simulatedTime}</strong>
+                  </span>
+                ) : (
+                  <span className="text-[10px] text-emerald-800 font-bold block mt-1.5">
+                    ✓ Mode temps réel actif : utilisation de l'heure locale réelle du navigateur ({new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })})
+                  </span>
+                )}
               </div>
             </div>
 

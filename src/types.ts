@@ -31,6 +31,11 @@ export interface Product {
   active: boolean;
   iconName: string;
   description?: string;
+  openingTime?: string; // HH:MM, e.g. "10:00"
+  closingTime?: string; // HH:MM, e.g. "10:10"
+  availabilityDurationMinutes?: number; // Duration of availability in minutes
+  manualClosed?: boolean; // Open or close manual override
+  manualOpened?: boolean; // Open or close manual override
 }
 
 export interface Investment {
@@ -129,5 +134,71 @@ export interface AppSettings {
     mobileMoney: string;
     moovMoney: string;
     flooz: string;
+  };
+  simulatedTime?: string; // Opt simulated time for testing scheduler e.g. "10:05"
+}
+
+export function checkProductOpen(prod: Product, currentTimeStr: string): { isOpen: boolean; reason: string } {
+  if (prod.category === 'STABILITÉ') {
+    return { isOpen: true, reason: 'Toujours disponible' };
+  }
+  if (prod.manualClosed) {
+    return { isOpen: false, reason: 'Fermé manuellement' };
+  }
+  if (prod.manualOpened) {
+    return { isOpen: true, reason: 'Ouvert manuellement' };
+  }
+
+  const { openingTime, closingTime, availabilityDurationMinutes } = prod;
+
+  if (!openingTime) {
+    // Default open if no schedule is active
+    return { isOpen: true, reason: 'Disponible' };
+  }
+
+  // Parse current system or simulated time (format "HH:MM")
+  const regex = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+  const resolvedTimeStr = regex.test(currentTimeStr) ? currentTimeStr : "12:00";
+  const [currH, currM] = resolvedTimeStr.split(':').map(Number);
+  const currTotal = currH * 60 + currM;
+
+  // Parse opening time
+  const [openH, openM] = openingTime.split(':').map(Number);
+  const openTotal = openH * 60 + openM;
+
+  // Calculate closing time
+  let closeTotal = 0;
+  if (closingTime) {
+    const [closeH, closeM] = closingTime.split(':').map(Number);
+    closeTotal = closeH * 60 + closeM;
+  } else if (availabilityDurationMinutes) {
+    closeTotal = openTotal + availabilityDurationMinutes;
+  } else {
+    // If opening time is specified but no duration, it is open for the rest of the day
+    closeTotal = 24 * 60;
+  }
+
+  if (closeTotal < openTotal) {
+    // Overnight lock
+    if (currTotal >= openTotal || currTotal < closeTotal) {
+      return { isOpen: true, reason: 'Ouvert' };
+    }
+  } else {
+    if (currTotal >= openTotal && currTotal < closeTotal) {
+      return { isOpen: true, reason: 'Ouvert' };
+    }
+  }
+
+  const formatTime = (totalMins: number) => {
+    const h = Math.floor((totalMins % (24 * 60)) / 60);
+    const m = Math.floor(totalMins % 60);
+    return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`;
+  };
+
+  const formattedClose = closingTime || formatTime(closeTotal);
+
+  return {
+    isOpen: false,
+    reason: `Fermé (Disponible uniquement de ${openingTime} à ${formattedClose})`,
   };
 }
