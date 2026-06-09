@@ -1,0 +1,6 @@
+{
+  "name": "AgriAfri",
+  "description": "Plateforme moderne d'investissement agricole de référence.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
