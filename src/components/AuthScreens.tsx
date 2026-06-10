@@ -83,6 +83,7 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
 
   // Alert labels feedback
   const [authError, setAuthError] = useState<string | null>(null);
+  const [registrationSuccess, setRegistrationSuccess] = useState(false);
 
   const handleRegisterSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -101,8 +102,10 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
     // Attempt registration (confirm is same as password since confirm field is removed)
     const signup = registerUser(regName, regPhone, regCountryCode, regPassword, regInviteCode);
     if (signup.success) {
-      alert('Votre compte AgriAfri a été créé avec succès ! Connecté automatiquement.');
-      onSuccess();
+      setRegistrationSuccess(true);
+      setTimeout(() => {
+        onSuccess();
+      }, 2500);
     } else {
       setAuthError(signup.message);
     }
@@ -295,6 +298,20 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
           ) : (
             /* ======================= VIEW: REGISTRATION SCREEN ======================= */
             <form onSubmit={handleRegisterSubmit} className="space-y-4">
+              
+              {registrationSuccess && (
+                <div id="registration-success-badge" className="bg-emerald-50 border border-emerald-200 p-4 rounded-2xl text-center space-y-1.5 animate-bounce mb-3">
+                  <div className="text-[#0f62fe] font-sans font-black text-xs uppercase tracking-wider leading-snug">
+                    Création de compte ... Bienvenue chez Agrocapital !
+                  </div>
+                  <div className="text-emerald-700 font-sans font-extrabold text-[13px] uppercase tracking-wide">
+                    ✓ Inscription réussie !
+                  </div>
+                  <div className="text-[10px] text-slate-500 font-sans font-medium">
+                    Connexion automatique en cours d'initialisation...
+                  </div>
+                </div>
+              )}
               
               {/* Pays Dropdown */}
               <div className="space-y-1">

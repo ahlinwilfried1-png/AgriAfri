@@ -28,6 +28,7 @@ import {
   Eye,
   Camera,
   Play,
+  MessageSquare,
 } from 'lucide-react';
 
 export const AdminPanel: React.FC = () => {
@@ -46,6 +47,9 @@ export const AdminPanel: React.FC = () => {
     verifyDeposit,
     verifyWithdrawal,
     replyToTicket,
+    sendMessageInTicket,
+    markTicketAsRead,
+    updateTicketStatus,
     addProduct,
     updateProduct,
     deleteProduct,
@@ -56,11 +60,14 @@ export const AdminPanel: React.FC = () => {
     editUserDetail,
     updateSettings,
     deleteReview,
+    addReview,
+    addNotificationForUser,
   } = useApp();
 
-  const [activeAdminSubTab, setActiveAdminSubTab] = useState<'dashboard' | 'users' | 'deposits' | 'withdrawals' | 'products' | 'support' | 'commissions' | 'settings'>('dashboard');
+  const [activeAdminSubTab, setActiveAdminSubTab] = useState<'dashboard' | 'users' | 'deposits' | 'withdrawals' | 'products' | 'support' | 'commissions' | 'settings' | 'reviews'>('dashboard');
 
   // Interactive local states
+  const [expandedUserIds, setExpandedUserIds] = useState<Record<string, boolean>>({});
   const [targetProofImage, setTargetProofImage] = useState<string | null>(null);
   const [showReplyModalFor, setShowReplyModalFor] = useState<string | null>(null);
   const [ticketReplyText, setTicketReplyText] = useState('');
@@ -91,6 +98,68 @@ export const AdminPanel: React.FC = () => {
   const [editProdRevenue, setEditProdRevenue] = useState<number>(14000);
   const [editProdIcon, setEditProdIcon] = useState('Sprout');
   const [editProdDescription, setEditProdDescription] = useState('');
+
+  // New Review / Notice publishing states
+  const [reviewAuthorType, setReviewAuthorType] = useState<'custom' | 'user'>('custom');
+  const [reviewSelectedUserId, setReviewSelectedUserId] = useState<string>('');
+  const [reviewCustomName, setReviewCustomName] = useState('');
+  const [reviewCustomAvatar, setReviewCustomAvatar] = useState('🧑‍🌾');
+  const [reviewRating, setReviewRating] = useState<number>(5);
+  const [reviewComment, setReviewComment] = useState('');
+  const [reviewImageUrl, setReviewImageUrl] = useState('');
+  const [reviewSuccessMsg, setReviewSuccessMsg] = useState('');
+  const [reviewSendAsNotification, setReviewSendAsNotification] = useState(true);
+
+  const handleReviewPublishSubmit = (e: React.FormEvent) => {
+    e.preventDefault();
+    let authorName = reviewCustomName.trim();
+    let authorAvatar = reviewCustomAvatar;
+
+    if (reviewAuthorType === 'user') {
+      const foundUser = users.find((u) => u.id === reviewSelectedUserId);
+      if (foundUser) {
+        authorName = foundUser.fullName;
+        authorAvatar = '👤'; // Default user bubble
+      } else {
+        alert("Action impossible : Aucun utilisateur sélectionné.");
+        return;
+      }
+    }
+
+    if (!authorName) {
+      alert("Veuillez saisir un nom d'auteur ou choisir un utilisateur.");
+      return;
+    }
+
+    if (!reviewComment.trim()) {
+      alert("Le message de l'avis ne peut pas être vide.");
+      return;
+    }
+
+    addReview(
+      authorName,
+      authorAvatar,
+      reviewRating,
+      reviewComment,
+      reviewImageUrl.trim() || undefined
+    );
+
+    // Send global notification if checked
+    if (reviewSendAsNotification) {
+      addNotificationForUser(
+        'all',
+        `📢 Nouvelle information - ${authorName}`,
+        reviewComment
+      );
+    }
+
+    // Reset standard fields
+    setReviewCustomName('');
+    setReviewComment('');
+    setReviewImageUrl('');
+    setReviewSuccessMsg('Témoignage / Avis publié avec succès et transmis aux messageries des comptes !');
+    setTimeout(() => setReviewSuccessMsg(''), 4000);
+  };
 
   // --- STATISTICS CALCULATIONS ---
   const totalUsersCount = users.length;
@@ -210,6 +279,7 @@ export const AdminPanel: React.FC = () => {
           { id: 'withdrawals', name: 'Retraits', icon: ArrowDownCircle },
           { id: 'products', name: 'Produits', icon: Package },
           { id: 'support', name: 'Tickets', icon: HelpCircle },
+          { id: 'reviews', name: 'Avis & Annonces', icon: MessageSquare },
           { id: 'commissions', name: 'Commissions', icon: Star },
           { id: 'settings', name: 'Paramètres', icon: Settings },
         ].map((subTab) => {
@@ -360,176 +430,287 @@ export const AdminPanel: React.FC = () => {
           </h3>
           
           <div className="space-y-3">
-            {users.map((u) => (
-              <div
-                id={`admin-user-row-${u.id}`}
-                key={u.id}
-                className="bg-white border border-slate-100 rounded-3xl p-5 shadow-2xs space-y-4 hover:border-emerald-100 transition-all"
-              >
-                <div className="flex justify-between items-start">
-                  <div>
-                    <h4 className="font-sans font-bold text-slate-800 text-xs flex items-center gap-1.5">
-                      {u.fullName}
-                      {u.blocked && (
-                        <span className="bg-rose-100 text-rose-700 text-[8px] font-sans font-bold px-1.5 py-0.5 rounded-full uppercase">Bloqué</span>
-                      )}
-                    </h4>
-                    <p className="font-sans text-[10px] text-slate-400 font-medium">
-                      Phone: <span className="font-mono font-bold text-slate-600">{u.countryCode} {u.phone}</span> • Code invitation unique : <span className="font-mono font-bold text-emerald-700">{u.referralCode}</span>
-                    </p>
-                    <div className="flex flex-wrap gap-2.5 mt-2 bg-slate-50 border border-slate-100 p-2 rounded-xl text-[9px] font-sans">
-                      <span className="text-slate-500 font-bold">Filiation & Parrainage :</span>
-                      <span className="text-slate-700">Filleuls : <strong className="text-slate-900">{users.filter((target) => target.referredBy === u.referralCode).length}</strong></span>
-                      <span className="text-emerald-700 font-semibold">Gains Commission : <strong>{(u.totalReferralGains || 0).toLocaleString()} FCFA</strong></span>
-                      {u.referredBy && (
-                        <span className="text-blue-700 font-medium">Parrain : <strong className="font-mono text-blue-900">{u.referredBy}</strong></span>
-                      )}
-                    </div>
-                  </div>
-                  
-                  <div className="text-right">
-                    <p className="font-sans text-[9px] text-slate-400">Balance Actuelle</p>
-                    <h5 className="font-sans font-black text-sm text-emerald-600">{u.balance.toLocaleString()} FCFA</h5>
-                  </div>
-                </div>
+            {users.map((u) => {
+              const userDeposits = deposits.filter((d) => d.userId === u.id);
+              const validatedDepositsSum = userDeposits.filter((d) => d.status === 'VALIDATED').reduce((acc, curr) => acc + curr.amount, 0);
+              const userInvestments = investments.filter((i) => i.userId === u.id);
+              const totalInvestedSum = userInvestments.reduce((acc, curr) => acc + curr.amount, 0);
+              const activeInvestments = userInvestments.filter((i) => i.status === 'ACTIVE');
+              const completedInvestments = userInvestments.filter((i) => i.status === 'COMPLETED');
+              const isExpanded = !!expandedUserIds[u.id];
 
-                {/* Sub edit settings area */}
-                {editingUserId === u.id ? (
-                  <div className="bg-slate-50 rounded-2xl p-4 space-y-3 border border-slate-100">
-                    <div className="grid grid-cols-3 gap-2">
-                      <div>
-                        <label className="text-[9px] text-slate-400 uppercase font-sans">Ajuster Nom</label>
-                        <input
-                          id="adjust-name-input"
-                          type="text"
-                          value={editUserName}
-                          onChange={(e) => setEditUserName(e.target.value)}
-                          className="w-full bg-white border rounded-lg px-2 py-1 text-xs font-sans text-slate-700 outline-none"
-                        />
+              return (
+                <div
+                  id={`admin-user-row-${u.id}`}
+                  key={u.id}
+                  className="bg-white border border-slate-100 rounded-3xl p-5 shadow-2xs space-y-4 hover:border-emerald-100 transition-all"
+                >
+                  <div className="flex justify-between items-start">
+                    <div>
+                      <h4 className="font-sans font-bold text-slate-800 text-xs flex items-center gap-1.5">
+                        {u.fullName}
+                        {u.blocked && (
+                          <span className="bg-rose-100 text-rose-700 text-[8px] font-sans font-bold px-1.5 py-0.5 rounded-full uppercase">Bloqué</span>
+                        )}
+                      </h4>
+                      <p className="font-sans text-[10px] text-slate-400 font-medium">
+                        Phone: <span className="font-mono font-bold text-slate-600">{u.countryCode} {u.phone}</span> • Code invitation unique : <span className="font-mono font-bold text-emerald-700">{u.referralCode}</span>
+                      </p>
+
+                      {/* Financial summary metrics of deposit & purchases */}
+                      <div className="flex flex-wrap gap-1.5 mt-2.5">
+                        <span className="bg-amber-50 border border-amber-100 text-amber-800 text-[9px] font-sans font-black px-2 py-0.5 rounded uppercase tracking-wide">
+                          💰 Recharges : {validatedDepositsSum.toLocaleString()} FCFA
+                        </span>
+                        <span className="bg-blue-50 border border-blue-100 text-blue-800 text-[9px] font-sans font-black px-2 py-0.5 rounded uppercase tracking-wide">
+                          🌾 Produits : {userInvestments.length} ({activeInvestments.length} en cours)
+                        </span>
+                        <span className="bg-indigo-50 border border-indigo-100 text-indigo-800 text-[9px] font-sans font-black px-2 py-0.5 rounded uppercase tracking-wide">
+                          🎯 Investi : {activeInvestments.reduce((acc, curr) => acc + curr.amount, 0).toLocaleString()} FCFA
+                        </span>
                       </div>
-                      <div>
-                        <label className="text-[9px] text-slate-400 uppercase font-sans">Ajuster Phone</label>
-                        <input
-                          id="adjust-phone-input"
-                          type="text"
-                          value={editUserPhone}
-                          onChange={(e) => setEditUserPhone(e.target.value)}
-                          className="w-full bg-white border rounded-lg px-2 py-1 text-xs font-sans text-slate-750 outline-none"
-                        />
-                      </div>
-                      <div>
-                        <label className="text-[9px] text-slate-400 uppercase font-sans text-amber-600 font-bold">Mot de passe</label>
-                        <input
-                          id="adjust-password-input"
-                          type="text"
-                          value={editUserPassword}
-                          onChange={(e) => setEditUserPassword(e.target.value)}
-                          className="w-full bg-white border rounded-lg px-2 py-1 text-xs font-sans text-slate-750 outline-none font-bold text-amber-700"
-                          placeholder="Entrez le mot de passe"
-                        />
+
+                      <div className="flex flex-wrap gap-2.5 mt-2.5 bg-slate-50 border border-slate-100 p-2 rounded-xl text-[9px] font-sans">
+                        <span className="text-slate-500 font-bold">Filiation & Parrainage :</span>
+                        <span className="text-slate-700">Filleuls : <strong className="text-slate-900">{users.filter((target) => target.referredBy === u.referralCode).length}</strong></span>
+                        <span className="text-emerald-700 font-semibold">Gains Commission : <strong>{(u.totalReferralGains || 0).toLocaleString()} FCFA</strong></span>
+                        {u.referredBy && (
+                          <span className="text-blue-700 font-medium">Parrain : <strong className="font-mono text-blue-900">{u.referredBy}</strong></span>
+                        )}
                       </div>
                     </div>
+                    
+                    <div className="text-right">
+                      <p className="font-sans text-[9px] text-slate-400">Balance Actuelle</p>
+                      <h5 className="font-sans font-black text-sm text-emerald-600">{u.balance.toLocaleString()} FCFA</h5>
+                    </div>
+                  </div>
 
-                    <div className="pt-2 border-t border-slate-200">
-                      <label className="block text-[9px] text-slate-400 uppercase font-sans mb-1">Montant à ajouter/déduire</label>
-                      <div className="flex gap-2">
-                        <input
-                          id="adjust-balance-input"
-                          type="number"
-                          placeholder="Ex: 50000"
-                          value={balanceAdjustmentAmount || ''}
-                          onChange={(e) => setBalanceAdjustmentAmount(Number(e.target.value))}
-                          className="flex-1 bg-white border rounded-lg px-2 py-1 text-xs font-sans font-bold text-slate-700 outline-none"
-                        />
+                  {/* Expanded User Details Sub-Panel */}
+                  {isExpanded && (
+                    <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4 space-y-4 animate-scale-up">
+                      {/* Recharges details */}
+                      <div className="space-y-2">
+                        <h5 className="text-[10px] font-sans font-extrabold text-[#92540c] uppercase tracking-wider border-b border-amber-100 pb-1 flex justify-between items-center bg-amber-50/50 p-1.5 rounded-lg">
+                          <span>💳 Historique des dépôts / recharges ({userDeposits.length})</span>
+                          <span className="text-[9px] text-amber-900 font-bold">Cumul validé: {validatedDepositsSum.toLocaleString()} FCFA</span>
+                        </h5>
+                        {userDeposits.length === 0 ? (
+                          <p className="text-[9.5px] text-slate-400 font-sans italic pl-1">Aucun dépôt déclaré par cet utilisateur.</p>
+                        ) : (
+                          <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1 pl-1">
+                            {userDeposits.map((dep) => (
+                              <div key={dep.id} className="flex justify-between items-center bg-white border border-slate-150 p-2 rounded-xl text-[10px] font-sans shadow-3xs">
+                                <div className="space-y-0.5">
+                                  <div className="flex items-center gap-1.5 font-bold text-slate-800">
+                                    <span>{dep.amount.toLocaleString()} FCFA</span>
+                                    <span className="text-[9px] font-normal text-slate-400">via {dep.operator}</span>
+                                  </div>
+                                  <div className="text-[8.5px] text-slate-400 font-mono">
+                                    {new Date(dep.date).toLocaleDateString('fr-FR')} {new Date(dep.date).toLocaleTimeString('fr-FR', {hour:'2-digit', minute:'2-digit'})}
+                                  </div>
+                                </div>
+                                <div>
+                                  {dep.status === 'VALIDATED' && <span className="bg-emerald-100 text-emerald-800 font-bold text-[8.5px] px-1.5 py-0.5 rounded">Validé</span>}
+                                  {dep.status === 'PENDING' && <span className="bg-amber-100 text-amber-800 font-bold text-[8.5px] px-1.5 py-0.5 rounded animate-pulse">En attente</span>}
+                                  {dep.status === 'REFUSED' && <span className="bg-rose-100 text-rose-800 font-bold text-[8.5px] px-1.5 py-0.5 rounded">Refusé</span>}
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Product purchases / investments details */}
+                      <div className="space-y-2">
+                        <h5 className="text-[10px] font-sans font-extrabold text-[#1a3a8a] uppercase tracking-wider border-b border-blue-100 pb-1 flex justify-between items-center bg-blue-50/50 p-1.5 rounded-lg">
+                          <span>🌾 Produits achetés / Investissements ({userInvestments.length})</span>
+                          <span className="text-[9px] text-blue-900 font-bold font-sans">Total investi: {totalInvestedSum.toLocaleString()} FCFA</span>
+                        </h5>
+                        {userInvestments.length === 0 ? (
+                          <p className="text-[9.5px] text-slate-400 font-sans italic pl-1">Aucun achat de produit enregistré.</p>
+                        ) : (
+                          <div className="max-h-36 overflow-y-auto space-y-1.5 pr-1 pl-1">
+                            {userInvestments.map((inv) => (
+                              <div key={inv.id} className="bg-white border border-slate-150 p-2.5 rounded-xl space-y-1 text-[10.5px] font-sans shadow-3xs">
+                                <div className="flex justify-between items-center">
+                                  <span className="font-bold font-sans text-slate-800">{inv.productName}</span>
+                                  {inv.status === 'ACTIVE' ? (
+                                    <span className="bg-blue-105 text-blue-800 bg-blue-100 font-bold text-[8px] px-1.5 py-0.5 rounded uppercase font-sans">En cours</span>
+                                  ) : (
+                                    <span className="bg-emerald-100 text-emerald-800 font-bold text-[8px] px-1.5 py-0.5 rounded uppercase font-sans">Terminé</span>
+                                  )}
+                                </div>
+                                <div className="grid grid-cols-2 gap-2 text-[9.5px] text-slate-500 font-semibold bg-slate-50/75 p-2 rounded-lg">
+                                  <div>Achat: <strong className="text-slate-800">{inv.amount.toLocaleString()} FCFA</strong></div>
+                                  <div>Retour: <strong className="text-emerald-700">{(inv.totalYield || 0).toLocaleString()} FCFA</strong></div>
+                                  <div>Durée: <strong className="text-slate-800">{inv.durationDays}j</strong> (Passe: <strong className="text-indigo-600">{inv.daysPassed}j</strong>)</div>
+                                  <div className="text-[8px] font-mono text-slate-400">Fin: {new Date(inv.endDate).toLocaleDateString()}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Sub edit settings area */}
+                  {editingUserId === u.id ? (
+                    <div className="bg-slate-50 rounded-2xl p-4 space-y-3 border border-slate-100">
+                      <div className="grid grid-cols-3 gap-2">
+                        <div>
+                          <label className="text-[9px] text-slate-400 uppercase font-sans">Ajuster Nom</label>
+                          <input
+                            id="adjust-name-input"
+                            type="text"
+                            value={editUserName}
+                            onChange={(e) => setEditUserName(e.target.value)}
+                            className="w-full bg-white border rounded-lg px-2 py-1 text-xs font-sans text-slate-700 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] text-slate-400 uppercase font-sans">Ajuster Phone</label>
+                          <input
+                            id="adjust-phone-input"
+                            type="text"
+                            value={editUserPhone}
+                            onChange={(e) => setEditUserPhone(e.target.value)}
+                            className="w-full bg-white border rounded-lg px-2 py-1 text-xs font-sans text-slate-750 outline-none"
+                          />
+                        </div>
+                        <div>
+                          <label className="text-[9px] text-slate-400 uppercase font-sans text-amber-600 font-bold">Mot de passe</label>
+                          <input
+                            id="adjust-password-input"
+                            type="text"
+                            value={editUserPassword}
+                            onChange={(e) => setEditUserPassword(e.target.value)}
+                            className="w-full bg-white border rounded-lg px-2 py-1 text-xs font-sans text-slate-750 outline-none font-bold text-amber-700"
+                            placeholder="Entrez le mot de passe"
+                          />
+                        </div>
+                      </div>
+
+                      <div className="pt-2 border-t border-slate-200">
+                        <label className="block text-[9px] text-slate-400 uppercase font-sans mb-1">Montant à ajouter/déduire</label>
+                        <div className="flex gap-2">
+                          <input
+                            id="adjust-balance-input"
+                            type="number"
+                            placeholder="Ex: 50000"
+                            value={balanceAdjustmentAmount || ''}
+                            onChange={(e) => setBalanceAdjustmentAmount(Number(e.target.value))}
+                            className="flex-1 bg-white border rounded-lg px-2 py-1 text-xs font-sans font-bold text-slate-700 outline-none"
+                          />
+                          <button
+                            id="admin-add-balance-btn"
+                            type="button"
+                            onClick={() => handleUserBalanceAction(u.id, 'add')}
+                            className="py-1 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xxs font-sans font-bold"
+                          >
+                            + Créditer
+                          </button>
+                          <button
+                            id="admin-sub-balance-btn"
+                            type="button"
+                            onClick={() => handleUserBalanceAction(u.id, 'subtract')}
+                            className="py-1 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xxs font-sans font-bold"
+                          >
+                            - Débiter
+                          </button>
+                        </div>
+                      </div>
+
+                      <div className="flex gap-2 justify-end pt-2 border-t border-slate-150">
                         <button
-                          id="admin-add-balance-btn"
-                          type="button"
-                          onClick={() => handleUserBalanceAction(u.id, 'add')}
-                          className="py-1 px-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xxs font-sans font-bold"
+                          id="user-save-btn"
+                          onClick={() => handleUserSaveInfo(u.id)}
+                          className="py-1 px-2.5 bg-slate-800 text-white text-xxs rounded font-sans font-bold"
                         >
-                          + Créditer
+                          Sauvegarder Info
                         </button>
                         <button
-                          id="admin-sub-balance-btn"
-                          type="button"
-                          onClick={() => handleUserBalanceAction(u.id, 'subtract')}
-                          className="py-1 px-3 bg-rose-600 hover:bg-rose-700 text-white rounded-lg text-xxs font-sans font-bold"
+                          id="user-cancel-edit-btn"
+                          onClick={() => setEditingUserId(null)}
+                          className="py-1 px-2 text-slate-500 bg-slate-200 text-xxs rounded font-sans font-bold"
                         >
-                          - Débiter
+                          Fermer
                         </button>
                       </div>
                     </div>
-
-                    <div className="flex gap-2 justify-end pt-2 border-t border-slate-150">
+                  ) : (
+                    <div className="flex flex-wrap gap-2 justify-end pt-2.5 border-t border-slate-50">
                       <button
-                        id="user-save-btn"
-                        onClick={() => handleUserSaveInfo(u.id)}
-                        className="py-1 px-2.5 bg-slate-800 text-white text-xxs rounded font-sans font-bold"
-                      >
-                        Sauvegarder Info
-                      </button>
-                      <button
-                        id="user-cancel-edit-btn"
-                        onClick={() => setEditingUserId(null)}
-                        className="py-1 px-2 text-slate-500 bg-slate-200 text-xxs rounded font-sans font-bold"
-                      >
-                        Fermer
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-wrap gap-2 justify-end pt-2.5 border-t border-slate-50">
-                    <button
-                      id={`btn-edit-usr-${u.id}`}
-                      onClick={() => {
-                        setEditingUserId(u.id);
-                        setEditUserName(u.fullName);
-                        setEditUserPhone(u.phone);
-                        setEditUserPassword(u.password || 'password');
-                        setBalanceAdjustmentAmount(0);
-                      }}
-                      className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-[10px] font-sans font-bold transition-colors select-none"
-                    >
-                      <Edit className="w-3 h-3 inline mr-1" /> Ajuster Balance / Info
-                    </button>
-
-                    <button
-                      id={`btn-block-usr-${u.id}`}
-                      onClick={() => toggleUserBlock(u.id)}
-                      className={`px-2.5 py-1.5 rounded-xl text-[10px] font-sans font-bold transition-colors select-none flex items-center gap-1 ${
-                        u.blocked
-                          ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
-                          : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
-                      }`}
-                    >
-                      {u.blocked ? (
-                        <>
-                          <UserCheck className="w-3 h-3" /> Débloquer
-                        </>
-                      ) : (
-                        <>
-                          <UserX className="w-3 h-3" /> Bloquer
-                        </>
-                      )}
-                    </button>
-
-                    {u.role !== 'admin' && (
-                      <button
-                        id={`btn-del-usr-${u.id}`}
+                        id={`btn-toggle-details-${u.id}`}
                         onClick={() => {
-                          if (confirm('Êtes-vous sûr de vouloir supprimer définitivement cet utilisateur de la plateforme AgriAfri ?')) {
-                            deleteUser(u.id);
-                          }
+                          setExpandedUserIds(prev => ({
+                            ...prev,
+                            [u.id]: !prev[u.id]
+                          }));
                         }}
-                        className="px-2.5 py-1.5 bg-rose-600 text-white hover:bg-rose-700 rounded-xl text-[10px] font-sans font-bold transition-colors select-none"
+                        className={`px-2.5 py-1.5 rounded-xl text-[10px] font-sans font-bold transition-all select-none flex items-center gap-1 cursor-pointer ${
+                          isExpanded
+                            ? 'bg-blue-600 text-white'
+                            : 'bg-indigo-50 hover:bg-indigo-100 text-indigo-700'
+                        }`}
                       >
-                        <Trash2 className="w-3 h-3 inline mr-0.5" /> Supprimer
+                        <Eye className="w-3.5 h-3.5" /> {isExpanded ? 'Masquer Détails' : 'Recharges & Achats 📊'}
                       </button>
-                    )}
-                  </div>
-                )}
-              </div>
-            ))}
+
+                      <button
+                        id={`btn-edit-usr-${u.id}`}
+                        onClick={() => {
+                          setEditingUserId(u.id);
+                          setEditUserName(u.fullName);
+                          setEditUserPhone(u.phone);
+                          setEditUserPassword(u.password || 'password');
+                          setBalanceAdjustmentAmount(0);
+                        }}
+                        className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-[10px] font-sans font-bold transition-colors select-none cursor-pointer"
+                      >
+                        <Edit className="w-3.5 h-3.5 inline mr-0.5" /> Ajuster Balance / Info
+                      </button>
+
+                      <button
+                        id={`btn-block-usr-${u.id}`}
+                        onClick={() => toggleUserBlock(u.id)}
+                        className={`px-2.5 py-1.5 rounded-xl text-[10px] font-sans font-bold transition-colors select-none flex items-center gap-1 cursor-pointer ${
+                          u.blocked
+                            ? 'bg-emerald-50 text-emerald-700 hover:bg-emerald-100'
+                            : 'bg-rose-50 text-rose-700 hover:bg-rose-100'
+                        }`}
+                      >
+                        {u.blocked ? (
+                          <>
+                            <UserCheck className="w-3 h-3" /> Débloquer
+                          </>
+                        ) : (
+                          <>
+                            <UserX className="w-3 h-3" /> Bloquer
+                          </>
+                        )
+                        }
+                      </button>
+
+                      {u.role !== 'admin' && (
+                        <button
+                          id={`btn-del-usr-${u.id}`}
+                          onClick={() => {
+                            if (confirm('Êtes-vous sûr de vouloir supprimer définitivement cet utilisateur de la plateforme AgriAfri ?')) {
+                              deleteUser(u.id);
+                            }
+                          }}
+                          className="px-2.5 py-1.5 bg-rose-600 text-white hover:bg-rose-700 rounded-xl text-[10px] font-sans font-bold transition-colors select-none cursor-pointer"
+                        >
+                          <Trash2 className="w-3 h-3 inline mr-0.5" /> Supprimer
+                        </button>
+                      )}
+                    </div>
+                  )}
+                </div>
+              );
+            })}
           </div>
         </div>
       )}
@@ -861,112 +1042,501 @@ export const AdminPanel: React.FC = () => {
       {/* ======================= TAB 6: GESTION SUPPORT ======================= */}
       {activeAdminSubTab === 'support' && (
         <div id="admin-tab-support" className="space-y-4">
-          <h3 className="font-sans font-extrabold text-slate-850 text-xs uppercase tracking-wider">
-            Boite de Réclamations Utilisateurs ({tickets.length})
-          </h3>
+          <div className="flex flex-wrap justify-between items-center gap-3">
+            <h3 className="font-sans font-extrabold text-slate-850 text-xs uppercase tracking-wider">
+              Boite de Réclamations Utilisateurs ({tickets.length})
+            </h3>
+            
+            <div className="flex gap-2 text-[10px] font-sans">
+              <span className="bg-rose-50 text-rose-700 border border-rose-100 px-2 py-1 rounded-lg font-bold">
+                ⚠️ Non lus : {tickets.filter(t => !t.messageStatus || t.messageStatus === 'NON_LU').length}
+              </span>
+              <span className="bg-amber-50 text-amber-700 border border-amber-100 px-2 py-1 rounded-lg font-bold">
+                📖 Lus : {tickets.filter(t => t.messageStatus === 'LU').length}
+              </span>
+              <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-1 rounded-lg font-bold">
+                ✅ Répondus : {tickets.filter(t => t.messageStatus === 'REPONDU').length}
+              </span>
+            </div>
+          </div>
 
           <div className="space-y-3">
             {tickets.length === 0 ? (
               <p className="text-center py-10 text-slate-400 bg-white rounded-3xl border text-sm font-sans">Aucune réclamation de client reçue.</p>
             ) : (
-              tickets.map((t) => (
-                <div
-                  id={`admin-ticket-row-${t.id}`}
-                  key={t.id}
-                  className="bg-white border border-slate-100 rounded-3xl p-5 hover:border-emerald-100 transition-all shadow-2xs space-y-3"
-                >
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-sans font-bold text-slate-850 text-xs flex items-center gap-1.5">
-                        <span className="inline-block w-2.5 h-2.5 bg-red-400 rounded-full"></span>
-                        {t.subject}
-                      </h4>
-                      <p className="font-sans text-[10px] text-slate-400 mt-0.5">
-                        Auteur : <strong className="text-slate-800">{t.userFullName}</strong> ({t.userPhone})
-                      </p>
-                      <p className="font-sans text-[9px] text-slate-400">
-                        Date de soumission : {new Date(t.date).toLocaleString('fr-FR')}
-                      </p>
+              tickets.map((t) => {
+                const isUnread = !t.messageStatus || t.messageStatus === 'NON_LU';
+                const isRead = t.messageStatus === 'LU';
+                const isReplied = t.messageStatus === 'REPONDU';
+
+                return (
+                  <div
+                    id={`admin-ticket-row-${t.id}`}
+                    key={t.id}
+                    className={`bg-white border rounded-3xl p-5 hover:border-emerald-100 transition-all shadow-2xs space-y-3 ${
+                      isUnread ? 'border-l-4 border-l-rose-500 border-slate-200' : 'border-slate-100'
+                    }`}
+                  >
+                    <div className="flex flex-wrap justify-between items-start gap-4">
+                      <div className="space-y-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          {isUnread && (
+                            <span className="inline-flex items-center gap-1 bg-red-100 text-rose-800 text-[9px] font-extrabold px-2 py-0.5 rounded-full animate-pulse uppercase">
+                              ● Non Lu
+                            </span>
+                          )}
+                          {isRead && (
+                            <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-900 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase">
+                              📖 Lu
+                            </span>
+                          )}
+                          {isReplied && (
+                            <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-950 text-[9px] font-extrabold px-2 py-0.5 rounded-full uppercase">
+                              ✅ Répondu
+                            </span>
+                          )}
+                          
+                          <h4 className="font-sans font-extrabold text-slate-800 text-xs">
+                            {t.subject}
+                          </h4>
+                        </div>
+                        
+                        <p className="font-sans text-[11px] text-slate-500 font-semibold">
+                          Client : <span className="text-slate-900 font-bold">{t.userFullName}</span> • Tél : <span className="font-mono text-slate-950 bg-slate-100 px-1 py-0.5 rounded">{t.userPhone}</span>
+                        </p>
+                        
+                        <p className="font-sans text-[9px] text-slate-400">
+                          Date et Heure : <strong className="text-slate-600">{new Date(t.date).toLocaleString('fr-FR')}</strong>
+                        </p>
+                      </div>
+
+                      {/* Manual Status Buttons for Admin */}
+                      <div className="flex flex-wrap items-center gap-1.5 bg-slate-50 border p-1.5 rounded-2xl">
+                        <span className="text-[8px] text-slate-400 font-bold uppercase tracking-wider pl-1">Ajuster:</span>
+                        <button
+                          type="button"
+                          onClick={() => updateTicketStatus(t.id, 'NON_LU')}
+                          className={`px-2 py-0.5 text-[8.5px] font-sans font-black rounded-lg transition-colors cursor-pointer ${
+                            isUnread ? 'bg-rose-600 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                          }`}
+                        >
+                          Non lu
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateTicketStatus(t.id, 'LU')}
+                          className={`px-2 py-0.5 text-[8.5px] font-sans font-black rounded-lg transition-colors cursor-pointer ${
+                            isRead ? 'bg-amber-550 bg-amber-500 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                          }`}
+                        >
+                          Lu
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => updateTicketStatus(t.id, 'REPONDU')}
+                          className={`px-2 py-0.5 text-[8.5px] font-sans font-black rounded-lg transition-colors cursor-pointer ${
+                            isReplied ? 'bg-emerald-600 text-white' : 'bg-slate-200 text-slate-600 hover:bg-slate-300'
+                          }`}
+                        >
+                          Répondu
+                        </button>
+                      </div>
                     </div>
 
-                    <div>
-                      {t.status === 'PENDING' ? (
-                        <span className="bg-amber-100 text-amber-800 px-2 py-0.5 text-[10px] rounded-full font-bold">A repondre</span>
-                      ) : (
-                        <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[10px] rounded-full font-bold">Résolu ✅</span>
-                      )}
+                    {/* Conversational support history list */}
+                    <div className="bg-slate-50 border border-slate-100 rounded-2xl p-4 space-y-3 mt-2">
+                      <p className="text-[9px] font-sans font-extrabold text-[#0c62e5] uppercase tracking-wider">Fil de discussion complet :</p>
+                      {(() => {
+                        const chatMsgs = t.messages || [];
+                        const formattedMsgs = chatMsgs.length > 0 ? chatMsgs : [
+                          {
+                            id: 'msg-init-' + t.id,
+                            sender: 'user' as const,
+                            text: t.message,
+                            date: t.date,
+                            image: t.screenshotImage
+                          },
+                          ...(t.reply ? [{
+                            id: 'msg-rep-' + t.id,
+                            sender: 'admin' as const,
+                            text: t.reply,
+                            date: t.date,
+                            image: undefined
+                          }] : [])
+                        ];
+
+                        return (
+                          <div className="space-y-3.5 max-h-[30vh] overflow-y-auto pr-1 flex flex-col pt-1">
+                            {formattedMsgs.map((msg, idx) => {
+                              const isAdmin = msg.sender === 'admin';
+                              return (
+                                <div key={msg.id || idx} className={`flex flex-col max-w-[85%] ${isAdmin ? 'ml-auto items-end' : 'mr-auto items-start'}`}>
+                                  <div className={`p-2.5 rounded-2xl text-[10.5px] leading-relaxed font-sans font-semibold ${
+                                    isAdmin 
+                                      ? 'bg-emerald-600 text-white rounded-tr-none' 
+                                      : 'bg-white border text-slate-800 rounded-tl-none shadow-3xs border-slate-150'
+                                  }`}>
+                                    <p className="whitespace-pre-wrap">{msg.text}</p>
+                                    {msg.image && (
+                                      <button
+                                        type="button"
+                                        onClick={() => setTargetProofImage(msg.image || null)}
+                                        className="block mt-1.5 rounded overflow-hidden cursor-zoom-in group"
+                                      >
+                                        <img src={msg.image} alt="Preuve" className="max-h-24 object-cover group-hover:scale-105 transition-transform" referrerPolicy="no-referrer" />
+                                      </button>
+                                    )}
+                                    <span className={`block text-[8px] text-right mt-1 font-mono ${isAdmin ? 'text-emerald-200' : 'text-slate-400'}`}>
+                                      {new Date(msg.date).toLocaleDateString('fr-FR')} {new Date(msg.date).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+                                    </span>
+                                  </div>
+                                  <span className="text-[8px] text-slate-400 mt-1 font-bold uppercase tracking-tight">
+                                    {isAdmin ? 'Moi (Conseiller)' : `${t.userFullName}`}
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
                     </div>
-                  </div>
 
-                  <p className="font-sans text-xs text-slate-600 bg-slate-50 p-3 rounded-2xl border border-slate-100/30">
-                    "{t.message}"
-                  </p>
-
-                  {t.screenshotImage && (
-                    <div className="pt-1 pb-2">
-                      <p className="text-[9px] text-slate-400 font-sans uppercase font-fold mb-1">Capture jointe :</p>
-                      <button
-                        id={`btn-view-ticket-proof-${t.id}`}
-                        onClick={() => setTargetProofImage(t.screenshotImage || null)}
-                        className="px-2.5 py-1.5 bg-amber-50 text-amber-800 border border-amber-100 hover:bg-amber-100 rounded-xl text-[10px] font-sans font-bold flex items-center gap-1 transition-colors select-none"
-                      >
-                        <Camera className="w-3.5 h-3.5 text-amber-600" />
-                        Voir la capture d'écran jointe
-                      </button>
-                    </div>
-                  )}
-
-                  {t.reply && (
-                    <div className="bg-emerald-50/50 border border-emerald-100/30 p-3 rounded-2xl text-xs font-sans text-emerald-900">
-                      <strong>Ma Réponse :</strong> "{t.reply}"
-                    </div>
-                  )}
-
-                  {t.status === 'PENDING' && (
-                    <div className="space-y-2 pt-2 border-t border-slate-50">
+                    {/* Reply actions flow */}
+                    <div className="pt-3 border-t border-slate-50 space-y-2">
                       {showReplyModalFor === t.id ? (
                         <div className="space-y-2">
                           <textarea
-                            id="reply-ticket-text"
-                            rows={3}
-                            placeholder="Écrivez votre réponse officielle de support client d'AgriAfri..."
+                            id={`reply-ticket-text-${t.id}`}
+                            rows={2}
+                            placeholder="Écrivez votre réponse officielle de support client..."
                             value={ticketReplyText}
                             onChange={(e) => setTicketReplyText(e.target.value)}
-                            className="w-full bg-slate-50 border p-3 rounded-xl text-xs font-sans text-slate-700 outline-none"
+                            className="w-full bg-slate-50 border p-3 rounded-xl text-xs font-sans text-slate-700 outline-none focus:border-emerald-250 focus:bg-white transition-all"
+                            autoFocus
                           />
                           <div className="flex gap-2 justify-end">
                             <button
-                              id="reply-ticket-cancel"
-                              onClick={() => setShowReplyModalFor(null)}
-                              className="px-3 py-1 bg-slate-100 text-slate-500 rounded text-xxs font-bold"
+                              id={`reply-cancel-${t.id}`}
+                              onClick={() => {
+                                setShowReplyModalFor(null);
+                                setTicketReplyText('');
+                              }}
+                              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-sans font-bold cursor-pointer transition-colors"
                             >
-                              Fermer
+                              Annuler
                             </button>
                             <button
-                              id="reply-ticket-submit"
-                              onClick={() => submitTicketReply(t.id)}
-                              className="px-3 py-1 bg-emerald-600 text-white rounded text-xxs font-bold"
+                              id={`reply-submit-${t.id}`}
+                              onClick={() => {
+                                if (!ticketReplyText.trim()) return;
+                                sendMessageInTicket(t.id, ticketReplyText, 'admin');
+                                setTicketReplyText('');
+                                setShowReplyModalFor(null);
+                              }}
+                              className="px-3.5 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-sans font-bold cursor-pointer transition-colors shadow-xs flex items-center gap-1"
                             >
-                              Transmettre
+                              Transmettre ✈️
                             </button>
                           </div>
                         </div>
                       ) : (
-                        <div className="text-right">
-                          <button
-                            id={`btn-open-reply-${t.id}`}
-                            onClick={() => setShowReplyModalFor(t.id)}
-                            className="px-3 py-1.5 bg-slate-800 hover:bg-slate-755 text-white text-[10px] font-sans font-bold rounded-xl transition-all"
-                          >
-                            Répondre au ticket
-                          </button>
+                        <div className="flex flex-wrap justify-between items-center bg-slate-50 px-3 py-2 rounded-2xl border gap-2">
+                          <span className="text-[10px] text-slate-400 font-sans font-bold">
+                            Total discussion : {(t.messages || []).length > 0 ? (t.messages || []).length : (t.reply ? 2 : 1)} message(s)
+                          </span>
+                          
+                          <div className="flex gap-2">
+                            {isUnread && (
+                              <button
+                                type="button"
+                                onClick={() => markTicketAsRead(t.id)}
+                                className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-[10px] font-sans font-bold rounded-xl transition-all cursor-pointer"
+                              >
+                                ✔️ Vu
+                              </button>
+                            )}
+                            
+                            <button
+                              id={`btn-open-reply-${t.id}`}
+                              type="button"
+                              onClick={() => {
+                                // Mark as read immediately when responding
+                                markTicketAsRead(t.id);
+                                setShowReplyModalFor(t.id);
+                                setTicketReplyText('');
+                              }}
+                              className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white text-[10px] font-sans font-bold rounded-xl transition-all cursor-pointer flex items-center gap-1"
+                            >
+                              💬 Répondre en ligne
+                            </button>
+                          </div>
                         </div>
                       )}
                     </div>
-                  )}
-                </div>
-              ))
+                  </div>
+                );
+              })
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ======================= TAB: GESTION DES AVIS & ANNONCES ======================= */}
+      {activeAdminSubTab === 'reviews' && (
+        <div id="admin-tab-reviews" className="space-y-4 animate-fade-in">
+          <div className="flex flex-wrap justify-between items-center gap-3">
+            <div>
+              <h3 className="font-sans font-extrabold text-slate-850 text-xs uppercase tracking-wider">
+                📢 Gestion & Publication de Témoignages ({reviews.length})
+              </h3>
+              <p className="text-[10px] text-slate-400 font-sans">
+                Gérez les témoignages de l'application et publiez des avis sur les comptes utilisateurs
+              </p>
+            </div>
+
+            <div className="bg-emerald-50 text-emerald-800 border border-emerald-100 font-bold font-sans text-[10px] px-3 py-1.5 rounded-xl">
+              ⭐ Moyenne d'évaluation : {(reviews.reduce((acc, curr) => acc + curr.rating, 0) / (reviews.length || 1)).toFixed(1)} / 5
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 lg:grid-cols-12 gap-5">
+            {/* COLUMN 1: FORM TO PUBLISH */}
+            <div className="lg:col-span-5 bg-white border border-slate-100 rounded-3xl p-5 shadow-2xs space-y-4 self-start">
+              <h4 className="font-sans font-extrabold text-slate-800 text-[11px] uppercase tracking-wide border-b pb-2">
+                ✍️ Publier un nouvel avis / Témoignage
+              </h4>
+
+              {reviewSuccessMsg && (
+                <div className="bg-emerald-50 border border-emerald-150 text-emerald-800 p-2.5 rounded-xl text-[10.5px] font-sans font-semibold text-center animate-pulse">
+                  {reviewSuccessMsg}
+                </div>
+              )}
+
+              <form onSubmit={handleReviewPublishSubmit} className="space-y-3 font-sans text-xs">
+                {/* Switcher Author style */}
+                <div>
+                  <label className="block text-[10.5px] font-semibold text-slate-500 uppercase tracking-tight mb-1">
+                    Type d'Auteur de l'avis
+                  </label>
+                  <div className="grid grid-cols-2 gap-2 bg-slate-50 p-1 rounded-xl border">
+                    <button
+                      type="button"
+                      onClick={() => setReviewAuthorType('custom')}
+                      className={`py-1 rounded-lg text-[9.5px] font-bold cursor-pointer transition-colors ${
+                        reviewAuthorType === 'custom'
+                          ? 'bg-slate-900 text-white'
+                          : 'text-slate-650 hover:bg-slate-100'
+                      }`}
+                    >
+                      Auteur personnalisé
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setReviewAuthorType('user');
+                        if (users.length > 0 && !reviewSelectedUserId) {
+                          setReviewSelectedUserId(users[0].id);
+                        }
+                      }}
+                      className={`py-1 rounded-lg text-[9.5px] font-bold cursor-pointer transition-colors ${
+                        reviewAuthorType === 'user'
+                          ? 'bg-slate-900 text-white'
+                          : 'text-slate-650 hover:bg-slate-100'
+                      }`}
+                    >
+                      Utilisateur enregistré
+                    </button>
+                  </div>
+                </div>
+
+                {reviewAuthorType === 'custom' ? (
+                  <div className="space-y-3">
+                    {/* Character Name */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 mb-1">Nom du rédacteur / Personnalité</label>
+                      <input
+                        type="text"
+                        placeholder="Ex: Wilfried Ahlin, Marie K., AgriPro-67"
+                        value={reviewCustomName}
+                        onChange={(e) => setReviewCustomName(e.target.value)}
+                        className="w-full bg-slate-50 border rounded-xl px-3 py-2 text-xs font-sans outline-none focus:border-amber-300 focus:bg-white transition-colors"
+                      />
+                    </div>
+
+                    {/* Emoji Avatar */}
+                    <div>
+                      <label className="block text-[10px] font-bold text-slate-600 mb-1">Mini Icône / Emoji Avatar</label>
+                      <div className="flex gap-1.5 overflow-x-auto py-1 scrollbar-none">
+                        {['🧑‍🌾', '👩‍🌾', '👤', '🌾', '🌱', '🌍', '💰', '👑', '🔥', '🌟', '🛡️'].map((emoji) => (
+                          <button
+                            type="button"
+                            key={emoji}
+                            onClick={() => setReviewCustomAvatar(emoji)}
+                            className={`w-8 h-8 rounded-full flex items-center justify-center border text-base cursor-pointer shrink-0 transition-all ${
+                              reviewCustomAvatar === emoji
+                                ? 'bg-amber-100 border-amber-300 scale-110 shadow-3xs'
+                                : 'bg-slate-50 hover:bg-slate-100 border-slate-150'
+                            }`}
+                          >
+                            {emoji}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                  </div>
+                ) : (
+                  <div>
+                    <label className="block text-[10px] font-bold text-slate-600 mb-1">Sélectionner le compte utilisateur</label>
+                    {users.length === 0 ? (
+                      <p className="text-slate-400 text-[9px]">Aucun utilisateur enregistré.</p>
+                    ) : (
+                      <select
+                        value={reviewSelectedUserId}
+                        onChange={(e) => setReviewSelectedUserId(e.target.value)}
+                        className="w-full bg-slate-50 border rounded-xl px-3 py-2 text-xs font-sans outline-none focus:border-amber-300 focus:bg-white cursor-pointer"
+                      >
+                        {users.map((u) => (
+                          <option key={u.id} value={u.id}>
+                            {u.fullName} ({u.phone})
+                          </option>
+                        ))}
+                      </select>
+                    )}
+                  </div>
+                )}
+
+                {/* Rating selection (1-5 stars) */}
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 mb-1">Évaluation (Étoiles)</label>
+                  <div className="flex gap-1">
+                    {[1, 2, 3, 4, 5].map((val) => (
+                      <button
+                        type="button"
+                        key={val}
+                        onClick={() => setReviewRating(val)}
+                        className="text-base cursor-pointer select-none focus:outline-none transition-transform active:scale-125"
+                      >
+                        {val <= reviewRating ? '⭐' : '☆'}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Comment Textarea */}
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 mb-1">Message du Témoignage / Avis</label>
+                  <textarea
+                    rows={3}
+                    placeholder="Écrivez le témoignage ici (ex: 'Rendement incroyable, dépôt reçu en 5 minutes ! Je recommande vivement AgriAfri.')"
+                    value={reviewComment}
+                    onChange={(e) => setReviewComment(e.target.value)}
+                    className="w-full bg-slate-50 border rounded-xl p-3 text-xs font-sans outline-none focus:border-amber-350 focus:bg-white transition-colors"
+                  />
+                </div>
+
+                {/* Image Illustration URL (Optional) */}
+                <div>
+                  <label className="block text-[10px] font-bold text-slate-600 mb-1">URL d'Image preuve de paiement / Projet (Optionnel)</label>
+                  <input
+                    type="text"
+                    placeholder="https://images.unsplash.com/... ou laissez vide"
+                    value={reviewImageUrl}
+                    onChange={(e) => setReviewImageUrl(e.target.value)}
+                    className="w-full bg-slate-50 border rounded-xl px-3 py-2 text-xs font-sans outline-none focus:border-amber-350 focus:bg-white transition-colors"
+                  />
+                  <div className="flex gap-1.5 mt-1">
+                    <button
+                      type="button"
+                      onClick={() => setReviewImageUrl('https://images.unsplash.com/photo-1593113598332-cd288d649433?auto=format&fit=crop&q=80&w=400')}
+                      className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 border rounded text-[8px] text-slate-500 font-mono"
+                    >
+                      Exemple Preuve 1
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setReviewImageUrl('https://images.unsplash.com/photo-1523348837708-15d4a09cfac2?auto=format&fit=crop&q=80&w=400')}
+                      className="px-2 py-0.5 bg-slate-100 hover:bg-slate-200 border rounded text-[8px] text-slate-500 font-mono"
+                    >
+                      Exemple Culture 2
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="w-full py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl text-center text-xs tracking-wider transition-all shadow-xs cursor-pointer select-none uppercase mt-2"
+                >
+                  🚀 Publier l'Avis / Témoignage
+                </button>
+              </form>
+            </div>
+
+            {/* COLUMN 2: REVIEWS FEED MODERATION LIST */}
+            <div className="lg:col-span-7 space-y-3">
+              <h4 className="font-sans font-extrabold text-slate-800 text-[11px] uppercase tracking-wide px-1">
+                📖 Flux d'avis publiés sur la plateforme ({reviews.length})
+              </h4>
+
+              {reviews.length === 0 ? (
+                <p className="text-center py-10 bg-white border rounded-3xl text-xs text-slate-400 font-sans">
+                  Aucun avis n'est actuellement publié.
+                </p>
+              ) : (
+                <div className="space-y-3 max-h-[75vh] overflow-y-auto pr-1">
+                  {reviews.map((rev) => (
+                    <div
+                      key={rev.id}
+                      className="bg-white border border-slate-100 rounded-3xl p-4 shadow-3xs flex gap-3 transition-all hover:border-slate-200"
+                    >
+                      <div className="w-9 h-9 rounded-full bg-slate-100 border flex items-center justify-center text-lg select-none shrink-0">
+                        {rev.authorAvatar || '👤'}
+                      </div>
+
+                      <div className="flex-1 space-y-1 overflow-hidden">
+                        <div className="flex justify-between items-start gap-2">
+                          <div>
+                            <h5 className="font-sans font-extrabold text-slate-800 text-xs text-left">
+                              {rev.authorName}
+                            </h5>
+                            <div className="flex items-center gap-1.5 justify-start">
+                              <span className="text-[9px] text-amber-500">
+                                {'⭐'.repeat(rev.rating)}
+                              </span>
+                              <span className="text-[8px] text-slate-400 font-mono">
+                                {rev.date ? new Date(rev.date).toLocaleDateString('fr-FR') : 'Date inconnue'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            onClick={() => {
+                              if (confirm(`Voulez-vous vraiment supprimer définitivement le témoignage de ${rev.authorName} ?`)) {
+                                deleteReview(rev.id);
+                              }
+                            }}
+                            className="p-1.5 bg-rose-50 text-rose-600 rounded-lg border border-rose-100 hover:bg-rose-100 hover:text-rose-750 transition-colors cursor-pointer"
+                            title="Supprimer définitivement cet avis"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        <p className="font-sans text-[11px] text-slate-600 leading-relaxed font-semibold pr-2 text-left">
+                          {rev.comment}
+                        </p>
+
+                        {rev.imageUrl && (
+                          <div className="mt-1.5 rounded-xl overflow-hidden border border-slate-100 max-h-24 w-40">
+                            <img src={rev.imageUrl} alt="Attachement" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

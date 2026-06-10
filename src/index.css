@@ -10,6 +10,7 @@
 /* Base style resets */
 html {
   font-family: var(--font-sans);
+  font-size: 110%; /* Agrandit de 10% l'ensemble des textes du site de manière harmonieuse */
 }
 
 h1, h2, h3, h4, h5, h6 {

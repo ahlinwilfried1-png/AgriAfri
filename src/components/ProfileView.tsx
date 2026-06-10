@@ -26,9 +26,19 @@ import {
   Clock,
   Briefcase,
   UserCheck,
+  Info,
+  HelpCircle,
+  Smartphone,
+  Download,
 } from 'lucide-react';
 
-export const ProfileView: React.FC = () => {
+interface ProfileViewProps {
+  isAdminView?: boolean;
+  setIsAdminView?: (val: boolean) => void;
+  setActiveTab?: (tab: string) => void;
+}
+
+export const ProfileView: React.FC<ProfileViewProps> = ({ isAdminView, setIsAdminView, setActiveTab }) => {
   const {
     currentUser,
     investments,
@@ -39,10 +49,14 @@ export const ProfileView: React.FC = () => {
     logoutUser,
     requestDeposit,
     requestWithdrawal,
+    tickets,
+    createTicket,
   } = useApp();
 
   // Active expanded accordion sub-menu
-  const [activeSubMenu, setActiveSubMenu] = useState<string | null>('invests');
+  const [activeSubMenu, setActiveSubMenu] = useState<string | null>('history');
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [txFilter, setTxFilter] = useState<'all' | 'deposit' | 'withdrawal' | 'revenue' | 'purchase'>('all');
 
   // --- DEPOSIT SUB-FORM STATE ---
   const [showDepositModal, setShowDepositModal] = useState(false);
@@ -174,7 +188,10 @@ export const ProfileView: React.FC = () => {
   const handleCopyLink = () => {
     const inviteLink = `${window.location.origin}/register?ref=${currentUser.referralCode}`;
     navigator.clipboard.writeText(inviteLink);
-    alert('Lien de parrainage copié avec succès ! \n' + inviteLink);
+    setLinkCopied(true);
+    setTimeout(() => {
+      setLinkCopied(false);
+    }, 2800);
   };
 
   const handleCopyCode = () => {
@@ -188,6 +205,50 @@ export const ProfileView: React.FC = () => {
   const userWiths = withdrawals.filter((w) => w.userId === currentUser.id);
   const userComs = commissions.filter((c) => c.referrerId === currentUser.id);
 
+  // Build a unified list of transactions
+  const unifiedTransactions = [
+    ...userDeps.map(dep => ({
+      id: `dep-${dep.id}`,
+      type: 'deposit' as const,
+      amount: dep.amount,
+      date: new Date(dep.date),
+      label: 'Dépôt',
+      operator: dep.operator,
+      status: dep.status,
+      details: `Virement via ${dep.operator}`,
+    })),
+    ...userWiths.map(w => ({
+      id: `with-${w.id}`,
+      type: 'withdrawal' as const,
+      amount: w.amount,
+      date: new Date(w.date),
+      label: 'Retrait',
+      operator: 'Mobile Money',
+      status: w.status,
+      details: `Destinataire: ${w.recipientName} (${w.recipientPhone})`,
+    })),
+    ...userComs.map(com => ({
+      id: `com-${com.id}`,
+      type: 'revenue' as const,
+      amount: com.amount,
+      date: new Date(com.date),
+      label: 'Revenu',
+      operator: `Niveau ${com.level}`,
+      status: 'PAID',
+      details: `Filleul: ${com.referredName}`,
+    })),
+    ...userInvests.map(inv => ({
+      id: `inv-${inv.id}`,
+      type: 'purchase' as const,
+      amount: inv.amount,
+      date: new Date(inv.purchaseDate),
+      label: 'Achat',
+      operator: 'Cycle agricole',
+      status: inv.status,
+      details: `${inv.productName} (${inv.durationDays} Jours)`,
+    }))
+  ].sort((a, b) => b.date.getTime() - a.date.getTime());
+
   const activeInvests = userInvests.filter((i) => i.status === 'ACTIVE');
   const finishedInvests = userInvests.filter((i) => i.status === 'COMPLETED');
   const stabilityInvests = userInvests.filter((i) => i.category === 'STABILITÉ');
@@ -197,87 +258,282 @@ export const ProfileView: React.FC = () => {
   const withdrawalsOpen = currentHour >= settings.withdrawStartHour && currentHour < settings.withdrawEndHour;
 
   return (
-    <div id="profile-view-container" className="animate-fade-in space-y-5 pb-24">
+    <div id="profile-view-container" className="animate-fade-in space-y-4 pb-24 relative">
       
-      {/* 💳 PREMIUM USER IDENTITY & BALANCE CARD (IMAGE 3 THEME) */}
+      {linkCopied && (
+        <div id="profile-copied-toast animate-bounce" className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white text-[11px] font-sans font-extrabold tracking-wide px-4 py-2 rounded-full shadow-lg border border-emerald-400/30 flex items-center justify-center gap-1.5">
+          <span>🤝</span>
+          <span>Lien de parrainage copié avec succès</span>
+        </div>
+      )}
+      
+      {/* 💳 COMSIC PREMIUM AVATAR & BACKGROUND (IMAGE 3 THEME) */}
       <div 
-        className="relative rounded-3xl p-6 overflow-hidden text-white shadow-xl bg-slate-950 border border-slate-800"
+        className="relative rounded-3xl p-5 overflow-hidden text-white shadow-xl border border-indigo-950"
         style={{
-          backgroundImage: "linear-gradient(135deg, #09090b 0%, #111827 50%, #030712 100%)"
+          backgroundImage: "linear-gradient(135deg, #1e1b4b 0%, #0f172a 60%, #020617 100%)"
         }}
       >
-        <div className="absolute right-0 top-0 w-36 h-36 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
-        <div className="absolute left-10 bottom-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none" />
+        {/* Glow effect */}
+        <div className="absolute top-0 right-0 w-32 h-32 bg-indigo-500/20 rounded-full blur-2xl pointer-events-none" />
+        
+        {/* Top right settings cog wheel icon */}
+        <button
+          onClick={() => {
+            if (confirm('Voulez-vous vous déconnecter de votre compte Agro Récolte ?')) {
+              logoutUser();
+            }
+          }}
+          className="absolute top-5 right-5 p-1.5 bg-white/10 hover:bg-white/20 active:scale-95 rounded-full transition-all cursor-pointer"
+          title="Déconnexion"
+        >
+          <LogOut className="w-4.5 h-4.5 text-slate-205" />
+        </button>
 
-        <div className="flex items-center gap-4.5 mb-6">
-          {/* Avatar frame */}
-          <div className="w-14 h-14 rounded-full bg-white text-slate-900 border-2 border-indigo-500/30 flex items-center justify-center font-sans font-black text-lg shadow-md select-none uppercase">
-            {currentUser.fullName
-              ? currentUser.fullName.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase()
-              : 'ID'}
+        <div className="flex items-center gap-4.5">
+          {/* Circular avatar frame matching mockup initials */}
+          <div className="w-15 h-15 rounded-full bg-[#8f96e8] text-slate-950 border-2 border-indigo-400 flex items-center justify-center font-sans font-black text-xl shadow-md select-none">
+            {currentUser.fullName ? currentUser.fullName.substring(0, 2).toUpperCase() : 'RG'}
           </div>
-          <div>
-            <h3 className="font-sans font-black text-base text-white tracking-tight leading-tight">
+
+          <div className="space-y-1">
+            <h3 className="font-sans font-black text-md text-white tracking-tight leading-none flex items-center gap-1.5">
               {currentUser.fullName}
+              <span className="text-[10px] bg-amber-500/25 border border-amber-500/30 text-amber-300 font-bold px-1.5 py-0.5 rounded-md uppercase">
+                VIP 1
+              </span>
             </h3>
-            <p className="font-mono text-xs text-slate-400 mt-1">
-              Tel: {currentUser.countryCode} {currentUser.phone}
+            
+            {/* Masked premium phone number formatting: e.g. 709*****19 */}
+            <p className="font-mono text-xs text-indigo-200">
+              {(() => {
+                const ph = currentUser.phone;
+                if (ph.length >= 6) {
+                  return `${ph.substring(0, 3)}*****${ph.substring(ph.length - 2)}`;
+                }
+                return ph;
+              })()}
             </p>
-            <span className="inline-block mt-1.5 px-2.5 py-0.5 bg-indigo-500/20 border border-indigo-400/20 text-indigo-300 text-[9px] font-bold uppercase rounded-full">
-              ID: Rocky_{currentUser.id.substring(0, 5)}
-            </span>
+
+            {/* Click to copy user ID badge */}
+            <button
+              onClick={() => {
+                navigator.clipboard.writeText(currentUser.id);
+                alert('ID Utilisateur copié : ' + currentUser.id);
+              }}
+              className="px-2 py-0.5 bg-white/10 hover:bg-white/20 active:scale-95 text-indigo-200 text-[10px] font-sans font-bold uppercase rounded-md flex items-center gap-1 transition-all cursor-pointer"
+            >
+              ID: {currentUser.id.substring(0, 6).toUpperCase()}
+              <Clipboard className="w-3 h-3 text-slate-350" />
+            </button>
           </div>
         </div>
+      </div>
 
-        {/* Account balance displays */}
-        <div className="bg-white/5 border border-white/10 rounded-2xl p-4.5 flex justify-between items-center">
-          <div>
-            <span className="text-[10px] uppercase font-sans tracking-widest text-[#ccd5fe] font-bold block leading-none">
-              Solde de compte
-            </span>
-            <div className="flex items-baseline gap-1.5 mt-2">
-              <span className="font-mono text-xl sm:text-2xl font-black text-white leading-none tracking-tight">
-                {currentUser.balance.toLocaleString('fr-FR')}
+      {/* 💎 VIP1 CARD AND PROGRESSION BLOCK (ACCURATE TO THE USER'S SCREENSHOT MOCKUP) */}
+      <div 
+        id="vip-mockup-card" 
+        className="rounded-3xl p-5 text-white shadow-xl relative overflow-hidden flex flex-col gap-4 border border-indigo-500/10"
+        style={{
+          backgroundImage: "linear-gradient(135deg, #4f46e5 0%, #311084 60%, #1e0954 100%)"
+        }}
+      >
+        {/* Light overlay glow */}
+        <div className="absolute top-0 right-0 w-32 h-32 bg-cyan-400/15 rounded-full blur-2xl pointer-events-none" />
+        
+        <div className="flex justify-between items-center">
+          <div className="flex items-center gap-2.5">
+            {/* Blue cyan diamond icon matching mockup */}
+            <span className="text-xl filter drop-shadow-[0_0_8px_rgba(34,211,238,0.7)]">💎</span>
+            <div>
+              <span className="font-sans font-black text-lg tracking-tight block leading-none text-white">
+                VIP1
               </span>
-              <span className="text-xs font-bold text-[#ccd5fe]">FCFA</span>
+              <span className="text-[11px] text-indigo-200/90 font-sans font-bold block mt-1">
+                Mise à niveau VIP2 manque encore <strong className="text-amber-400 font-extrabold">18 000.00</strong> FCFA
+              </span>
             </div>
           </div>
-          <div className="text-right">
-            <span className="text-[9px] uppercase tracking-wider text-[#ccd5fe] font-bold block leading-none">Revenus Cumulés</span>
-            <span className="font-mono text-sm font-extrabold text-emerald-400 mt-2 block leading-none">
-              +{currentUser.totalEarnings.toLocaleString('fr-FR')} FCFA
-            </span>
+          {/* Present box gift icon on the right as shown in mockup */}
+          <div className="text-2xl animate-pulse shrink-0">
+            🎁
           </div>
         </div>
 
-        {/* Quick Deposit & Withdrawal Buttons */}
-        <div className="grid grid-cols-2 gap-3 mt-4.5">
+        {/* Progress bar matching mockup screen (thin horizontal line) */}
+        <div className="space-y-1">
+          <div className="w-full bg-black/30 h-1.5 rounded-full overflow-hidden border border-white/5">
+            <div 
+              className="h-full rounded-full bg-gradient-to-r from-cyan-400 to-indigo-400" 
+              style={{ width: '38%' }}
+            />
+          </div>
+          <div className="flex justify-between text-[8px] text-indigo-205 font-sans font-bold uppercase tracking-wider">
+            <span>Progression: 38%</span>
+            <span>VIP2 à 30 000 FCFA</span>
+          </div>
+        </div>
+      </div>
+
+      {/* 🛠️ ACTIVE ADMIN DASHBOARD MODE CARD TOGGLE - IF USER IS AN ADMIN */}
+      {currentUser.role === 'admin' && setIsAdminView && (
+        <div className="bg-slate-900 border-2 border-amber-500/40 rounded-3xl p-4 shadow-md text-white flex justify-between items-center">
+          <div className="space-y-0.5">
+            <h4 className="font-sans font-black text-xs text-amber-400 uppercase tracking-wider flex items-center gap-1">
+              <span>⚙️</span> Mode Administrateur
+            </h4>
+            <p className="text-[10px] text-slate-400 leading-tight font-sans">
+              Basculez vers l'espace de gestion et suivi
+            </p>
+          </div>
           <button
-            id="profile-action-deposit"
-            onClick={() => {
-              setDepSuccess('');
-              setDepError('');
-              setShowDepositModal(true);
-            }}
-            className="py-2.5 bg-[#9c2b2b] hover:bg-[#b03030] active:scale-95 text-white font-sans font-black text-xs uppercase tracking-wider rounded-3xl flex items-center justify-center gap-1.5 transition-all select-none cursor-pointer"
+            id="toggle-admin-space-btn"
+            onClick={() => setIsAdminView(true)}
+            className="px-4 py-1.5 bg-amber-500 hover:bg-amber-600 active:scale-95 text-slate-950 font-sans font-black text-[10px] uppercase tracking-wider rounded-xl transition-all cursor-pointer"
           >
-            <ArrowUpCircle className="w-4 h-4 text-white" />
-            Recharger
-          </button>
-          
-          <button
-            id="profile-action-withdraw"
-            onClick={() => {
-              setWithSuccess('');
-              setWithError('');
-              setShowWithdrawModal(true);
-            }}
-            className="py-2.5 bg-[#eceff3] hover:bg-slate-200 active:scale-95 text-[#2a3042] font-sans font-black text-xs uppercase tracking-wider rounded-3xl flex items-center justify-center gap-1.5 transition-all select-none cursor-pointer"
-          >
-            <ArrowDownCircle className="w-4 h-4 text-[#2a3042]" />
-            Retrait
+            Ouvrir
           </button>
         </div>
+      )}
+
+      {/* 📊 FOUR-COLUMN LINK BUTTON ROW (Recharger, Retirer, Mes Commandes, Mobile Money) */}
+      <div className="grid grid-cols-4 gap-2 bg-white/80 backdrop-blur-md rounded-2xl p-4 border border-white/50 shadow-2xs">
+        {/* A. Recharger */}
+        <button
+          onClick={() => {
+            if (setActiveTab) {
+              setActiveTab('recharge');
+            }
+          }}
+          className="flex flex-col items-center justify-center focus:outline-none focus:ring-0 group cursor-pointer"
+        >
+          <div className="w-11 h-11 rounded-full bg-blue-50 border border-blue-100 flex items-center justify-center text-md shadow-inner transition-transform group-hover:scale-105 active:scale-95">
+            💳
+          </div>
+          <span className="text-[10px] font-sans font-extrabold text-slate-600 mt-1 text-center select-none truncate w-full">
+            Recharger
+          </span>
+        </button>
+
+        {/* B. Retirer */}
+        <button
+          onClick={() => {
+            if (setActiveTab) {
+              setActiveTab('retrait');
+            }
+          }}
+          className="flex flex-col items-center justify-center focus:outline-none focus:ring-0 group cursor-pointer"
+        >
+          <div className="w-11 h-11 rounded-full bg-emerald-50 border border-emerald-100 flex items-center justify-center text-md shadow-inner transition-transform group-hover:scale-105 active:scale-95">
+            💸
+          </div>
+          <span className="text-[10px] font-sans font-extrabold text-slate-600 mt-1 text-center select-none truncate w-full">
+            Retirer
+          </span>
+        </button>
+
+        {/* C. Mes Commandes */}
+        <button
+          onClick={() => {
+            setActiveSubMenu('invests');
+            const targetEl = document.getElementById('profile-submenus-accordion');
+            if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth' });
+          }}
+          className="flex flex-col items-center justify-center focus:outline-none focus:ring-0 group cursor-pointer"
+        >
+          <div className="w-11 h-11 rounded-full bg-amber-50 border border-amber-100 flex items-center justify-center text-md shadow-inner transition-transform group-hover:scale-105 active:scale-95">
+            📜
+          </div>
+          <span className="text-[10px] font-sans font-extrabold text-slate-600 mt-1 text-center select-none truncate w-full">
+            Commandes
+          </span>
+        </button>
+
+        {/* D. Mobile Money Details */}
+        <button
+          onClick={() => {
+            setActiveSubMenu('deposits');
+            const targetEl = document.getElementById('profile-submenus-accordion');
+            if (targetEl) targetEl.scrollIntoView({ behavior: 'smooth' });
+          }}
+          className="flex flex-col items-center justify-center focus:outline-none focus:ring-0 group cursor-pointer"
+        >
+          <div className="w-11 h-11 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-md shadow-inner transition-transform group-hover:scale-105 active:scale-95">
+            📲
+          </div>
+          <span className="text-[10px] font-sans font-extrabold text-slate-600 mt-1 text-center select-none truncate w-full">
+            Historique
+          </span>
+        </button>
+      </div>
+
+      {/* 💰 DUAL-BALANCE METRIC DISPLAY CARD: "Mon revenu" */}
+      <div className="bg-white/80 backdrop-blur-md rounded-2xl p-4 border border-white/50 shadow-2xs space-y-3">
+        <h4 className="font-sans font-black text-xs text-slate-800 uppercase tracking-tight flex items-center gap-1.5 pb-2 border-b border-slate-100">
+          💼 Mon Revenu
+        </h4>
+        <div className="grid grid-cols-2 gap-4">
+          <div className="border-r border-slate-100/80 pr-2">
+            <span className="font-mono text-base font-black text-slate-900 leading-none">
+              {currentUser.balance.toLocaleString('fr-FR')}
+            </span>
+            <span className="text-[9px] font-sans font-bold text-slate-405 block uppercase mt-1">
+              Solde de recharge
+            </span>
+          </div>
+
+          <div className="pl-2">
+            <span className="font-mono text-base font-black text-slate-900 leading-none text-emerald-600">
+              {currentUser.totalEarnings.toLocaleString('fr-FR')}
+            </span>
+            <span className="text-[9px] font-sans font-bold text-slate-405 block uppercase mt-1">
+              Solde de retrait
+            </span>
+          </div>
+        </div>
+      </div>
+
+      {/* 📢 DUAL COLUMNS SHORTCUT CARDS (Inviter des amis / Roue de la chance) */}
+      <div className="grid grid-cols-2 gap-3">
+        {/* Orange card: Inviter des amis */}
+        <button
+          onClick={handleCopyLink}
+          type="button"
+          className="bg-gradient-to-br from-amber-500 to-orange-600 text-white text-left p-3.5 rounded-2xl shadow-xs relative overflow-hidden group transition-all duration-150 active:scale-98 cursor-pointer"
+        >
+          <div className="absolute -right-2 -bottom-2 w-12 h-12 bg-white/10 rounded-full blur-xs pointer-events-none" />
+          <span className="text-lg block mb-1">👥</span>
+          <h4 className="font-sans font-black text-xs leading-none">Inviter des amis</h4>
+          <p className="text-[9px] text-amber-50/80 mt-1 pr-1 font-sans leading-snug">
+            Invitez des amis pour gagner une commission.
+          </p>
+        </button>
+
+        {/* Emerald card: Avis & Témoignages */}
+        <button
+          onClick={() => {
+            const tabAvis = document.getElementById('nav-tab-forum');
+            if (tabAvis) {
+              tabAvis.click();
+            }
+          }}
+          type="button"
+          className="bg-gradient-to-br from-emerald-500 to-green-600 text-white text-left p-3.5 rounded-2xl shadow-xs relative overflow-hidden group transition-all duration-150 active:scale-98 cursor-pointer"
+        >
+          <div className="absolute -right-2 -bottom-2 w-12 h-12 bg-white/10 rounded-full blur-xs pointer-events-none" />
+          <span className="text-lg block mb-1">⭐</span>
+          <h4 className="font-sans font-black text-xs leading-none">Avis & Retours</h4>
+          <p className="text-[9px] text-emerald-50/80 mt-1 pr-1 font-sans leading-snug">
+            Consultez les témoignages ou écrivez le vôtre !
+          </p>
+        </button>
+      </div>
+
+      {/* 🏷️ SECTION TITLE BLOCK FOR SUBMENUS */}
+      <div className="pt-2">
+        <h3 className="font-sans font-black text-xs text-[#2a3042] uppercase tracking-wide border-l-4 border-indigo-500 pl-2">
+          | Service d'application
+        </h3>
       </div>
 
       {/* 🗃️ DETAILED COLLAPSIBLE SUBMENUS ACCORDION */}
@@ -285,226 +541,248 @@ export const ProfileView: React.FC = () => {
         {[
           {
             id: 'invests',
-            title: '💼 Mes Produits / Investissements Agricoles',
+            title: '📜 Mes Commandes & Évolution',
             icon: Briefcase,
-            badge: activeInvests.length > 0 ? `${activeInvests.length} actif(s)` : null,
+            badge: `${userInvests.length} achat(s)`,
             content: (
-              <div className="space-y-4">
-                {/* ACTIVE PROJECTS CONTAINER */}
-                <div>
-                  <h4 className="font-sans font-bold text-xs text-emerald-800 uppercase tracking-wide mb-2 flex items-center gap-1">
-                    🌱 Cycles en cours d'exploitation ({activeInvests.length})
-                  </h4>
-                  {activeInvests.length === 0 ? (
-                    <p className="text-xs text-slate-400 py-4 bg-slate-50/50 rounded-2xl border border-dashed border-slate-100 text-center font-sans">
-                      Aucun capital actif pour le moment.
+              <div className="space-y-3 font-sans text-xs">
+                {userInvests.length === 0 ? (
+                  <div className="text-center py-6 space-y-2">
+                    <p className="text-slate-400 font-sans text-[11px]">
+                      Vous n'avez pas encore d'investissements actifs ou de commandes.
                     </p>
-                  ) : (
-                    <div className="space-y-3">
-                      {activeInvests.map((inv) => {
-                        const progressPercent = Math.min(100, Math.round((inv.daysPassed / inv.durationDays) * 100));
-                        return (
-                          <div
-                            id={`user-active-inv-${inv.id}`}
-                            key={inv.id}
-                            className="bg-white border border-slate-100 hover:border-emerald-100 rounded-2xl p-4 shadow-2xs space-y-2.5 transition-all"
-                          >
-                            <div className="flex justify-between items-start">
-                              <div>
-                                <h5 className="font-sans font-bold text-slate-800 text-xs">
-                                  {inv.productName}
-                                </h5>
-                                <div className="flex items-center gap-1.5 flex-wrap mt-1">
-                                  <span className="bg-emerald-50 border border-emerald-100 text-emerald-800 text-[9px] font-sans font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider">
-                                    {inv.category}
-                                  </span>
-                                  <span className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 text-[9px] font-sans font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-0.5">
-                                    ✅ Fait partie
-                                  </span>
-                                </div>
-                              </div>
-                              <div className="text-right">
-                                <span className="font-mono text-xs font-bold text-slate-800">
-                                  Price: {inv.amount.toLocaleString()} FCFA
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab && setActiveTab('produits')}
+                      className="px-4 py-1.5 bg-slate-900 text-white rounded-xl text-[10px] font-bold hover:bg-slate-800 transition-all cursor-pointer"
+                    >
+                      🌾 Investir sur un produit
+                    </button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    {userInvests.map((inv) => {
+                      const dailyNetProfit = Math.round((inv.totalYield - inv.amount) / inv.durationDays);
+                      const accumulatedNetProfit = Math.round(dailyNetProfit * inv.daysPassed);
+                      const progressPct = Math.min(100, Math.round((inv.daysPassed / inv.durationDays) * 100));
+                      const isActive = inv.status === 'ACTIVE';
+
+                      return (
+                        <div
+                          id={`user-ordered-product-${inv.id}`}
+                          key={inv.id}
+                          className={`bg-white border rounded-2xl p-4 shadow-3xs space-y-3 transition-all hover:border-slate-200 ${
+                            isActive ? 'border-amber-200' : 'border-slate-100'
+                          }`}
+                        >
+                          {/* Card header */}
+                          <div className="flex justify-between items-start gap-2">
+                            <div>
+                              <span className="text-[9px] bg-emerald-50 text-emerald-700 font-bold px-1.5 py-0.5 rounded uppercase tracking-wide">
+                                {inv.category}
+                              </span>
+                              <h4 className="font-sans font-black text-slate-800 text-[12px] mt-1">
+                                {inv.productName}
+                              </h4>
+                            </div>
+
+                            <div>
+                              {isActive ? (
+                                <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-800 text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase animate-pulse">
+                                  ● En Production
                                 </span>
-                                <p className="font-sans text-[10px] text-emerald-600 font-semibold mt-0.5">
-                                  Dividende total : {inv.totalYield.toLocaleString()} FCFA
-                                </p>
-                              </div>
-                            </div>
-
-                            {/* PROGRESSBAR */}
-                            <div className="space-y-1">
-                              <div className="flex justify-between text-[10px] text-slate-500 font-sans">
-                                <span>Cycle: {inv.daysPassed}/{inv.durationDays} Jours</span>
-                                <span className="font-bold text-emerald-700">{progressPercent}%</span>
-                              </div>
-                              <div className="w-full bg-slate-150 h-2 rounded-full overflow-hidden">
-                                <div
-                                  className="h-full bg-emerald-500 rounded-full transition-all duration-500"
-                                  style={{ width: `${progressPercent}%` }}
-                                ></div>
-                              </div>
-                            </div>
-
-                            <div className="flex justify-between items-center text-[10px] font-sans text-slate-400 bg-slate-50 p-2 rounded-lg">
-                              <span>Achat: {new Date(inv.purchaseDate).toLocaleDateString('fr-FR')}</span>
-                              <span className="font-semibold text-slate-600">Récolte: {new Date(inv.endDate).toLocaleDateString('fr-FR')}</span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1 bg-emerald-100 text-emerald-800 text-[9px] font-bold px-2.5 py-0.5 rounded-full uppercase">
+                                  ✓ Terminé
+                                </span>
+                              )}
                             </div>
                           </div>
-                        );
-                      })}
-                    </div>
-                  )}
+
+                          {/* Grid metrics */}
+                          <div className="grid grid-cols-2 gap-2 bg-slate-50 border border-slate-100/60 p-2.5 rounded-xl text-[10.5px]">
+                            <div>
+                              <span className="block text-[8.5px] text-slate-400 font-bold uppercase">Capital d'achat</span>
+                              <strong className="font-mono text-slate-700 text-[11px]">
+                                {inv.amount.toLocaleString()} FCFA
+                              </strong>
+                            </div>
+                            <div>
+                              <span className="block text-[8.5px] text-slate-400 font-bold uppercase">Retour attendu</span>
+                              <strong className="font-mono text-emerald-600 text-[11px]">
+                                {inv.totalYield.toLocaleString()} FCFA
+                              </strong>
+                            </div>
+                            <div className="pt-1.5 border-t border-slate-200/50">
+                              <span className="block text-[8.5px] text-slate-400 font-bold uppercase">Gain quotidien</span>
+                              <strong className="font-mono text-indigo-600 text-[11px]">
+                                +{dailyNetProfit.toLocaleString()} FCFA / jr
+                              </strong>
+                            </div>
+                            <div className="pt-1.5 border-t border-slate-200/50">
+                              <span className="block text-[8.5px] text-slate-400 font-bold uppercase">Revenu accumulé</span>
+                              <strong className="font-mono text-emerald-700 text-[11px]">
+                                +{accumulatedNetProfit.toLocaleString()} FCFA
+                              </strong>
+                            </div>
+                          </div>
+
+                          {/* Evolution Progress section */}
+                          <div className="space-y-1">
+                            <div className="flex justify-between items-center text-[9px] font-bold text-slate-500 uppercase">
+                              <span>Évolution : {progressPct}%</span>
+                              <span>Jour {inv.daysPassed} / {inv.durationDays}</span>
+                            </div>
+                            <div className="w-full bg-slate-150 bg-slate-100 h-2.5 rounded-full overflow-hidden border border-slate-200">
+                              <div
+                                className={`h-full rounded-full transition-all duration-500 ${
+                                  isActive 
+                                    ? 'bg-gradient-to-r from-amber-400 to-indigo-505 bg-indigo-500 animate-pulse' 
+                                    : 'bg-emerald-500'
+                                }`}
+                                style={{ width: `${progressPct}%` }}
+                              />
+                            </div>
+                          </div>
+
+                          {/* Dates footer */}
+                          <div className="flex justify-between items-center text-[8.5px] text-slate-400 font-mono border-t border-slate-100/80 pt-2 shrink-0">
+                            <span>Achat : {new Date(inv.purchaseDate).toLocaleDateString('fr-FR')}</span>
+                            <span>Échéance : {new Date(inv.endDate).toLocaleDateString('fr-FR')}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            ),
+          },
+          {
+            id: 'history',
+            title: '📊 Historique des Transactions',
+            icon: History,
+            badge: `${userDeps.length + userWiths.length + userComs.length + userInvests.length} opération(s)`,
+            content: (
+              <div className="space-y-3 font-sans text-xs">
+                {/* Micro Filter Pills */}
+                <div className="flex gap-1.5 overflow-x-auto pb-1.5 scrollbar-none border-b border-slate-100">
+                  {[
+                    { key: 'all', label: 'Tout', emoji: '📋' },
+                    { key: 'deposit', label: 'Dépôts', emoji: '📥' },
+                    { key: 'purchase', label: 'Achats', emoji: '🌾' },
+                    { key: 'revenue', label: 'Revenus', emoji: '📈' },
+                    { key: 'withdrawal', label: 'Retraits', emoji: '💸' }
+                  ].map((pill) => {
+                    const active = txFilter === pill.key;
+                    return (
+                      <button
+                        key={pill.key}
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTxFilter(pill.key as any);
+                        }}
+                        className={`px-3 py-1.5 rounded-full text-[10px] font-extrabold uppercase tracking-wide select-none transition-all flex items-center gap-1 shrink-0 cursor-pointer ${
+                          active
+                            ? 'bg-indigo-600 text-white shadow-xs'
+                            : 'bg-slate-100 text-slate-500 hover:bg-slate-200'
+                        }`}
+                      >
+                        <span>{pill.emoji}</span>
+                        <span>{pill.label}</span>
+                      </button>
+                    );
+                  })}
                 </div>
 
-                {/* FINISHED PROJECTS CONTAINER */}
-                <div className="pt-2 border-t border-slate-50">
-                  <h4 className="font-sans font-bold text-xs text-slate-500 uppercase tracking-wide mb-2">
-                    ✅ Recettes Agri clôturées ({finishedInvests.length})
-                  </h4>
-                  {finishedInvests.length === 0 ? (
-                    <p className="text-xs text-slate-350 text-center py-2 font-sans">
-                      Aucun produit n'est encore arrivé à expiration.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {finishedInvests.map((inv) => (
+                {/* Filtered list of transactions */}
+                {unifiedTransactions.filter(tx => txFilter === 'all' || tx.type === txFilter).length === 0 ? (
+                  <p className="text-xs text-slate-400 py-6 text-center font-sans">
+                    Aucune transaction trouvée pour cette catégorie.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {unifiedTransactions
+                      .filter(tx => txFilter === 'all' || tx.type === txFilter)
+                      .map((tx) => (
                         <div
-                          id={`user-finished-inv-${inv.id}`}
-                          key={inv.id}
-                          className="bg-slate-50/50 border border-slate-100 rounded-2xl p-3 flex justify-between items-center text-xs font-sans hover:bg-slate-50"
+                          id={`tx-history-item-${tx.id}`}
+                          key={tx.id}
+                          className="p-3 bg-white border border-slate-100 rounded-2xl flex justify-between items-center shadow-2xs hover:border-slate-200 transition-all"
                         >
-                          <div>
-                            <p className="font-bold text-slate-700">{inv.productName}</p>
-                            <span className="text-[10px] text-slate-400">Durée : {inv.durationDays} Jours</span>
+                          <div className="space-y-1">
+                            <div className="flex items-center gap-1.5">
+                              {/* Icon Indicator for transaction types */}
+                              <span className={`text-[9px] font-black uppercase px-2 py-0.5 rounded-md ${
+                                tx.type === 'deposit' 
+                                  ? 'bg-indigo-50 text-indigo-707 text-indigo-700' 
+                                  : tx.type === 'withdrawal' 
+                                  ? 'bg-rose-50 text-rose-707 text-rose-700' 
+                                  : tx.type === 'purchase'
+                                  ? 'bg-amber-50 text-amber-700'
+                                  : 'bg-emerald-50 text-emerald-707 text-emerald-700'
+                              }`}>
+                                {tx.label}
+                              </span>
+                              <span className="bg-slate-100 text-slate-600 font-bold px-1.5 py-0.5 text-[8.5px] rounded-md">
+                                {tx.operator}
+                              </span>
+                            </div>
+                            <p className="font-extrabold text-slate-800 text-xs">
+                              {(tx.type === 'withdrawal' || tx.type === 'purchase') ? '-' : '+'}{tx.amount.toLocaleString()} FCFA
+                            </p>
+                            <p className="text-[10px] text-slate-500 leading-snug">
+                              {tx.details}
+                            </p>
+                            <p className="text-[8.5px] text-slate-405 font-mono">
+                              Le {tx.date.toLocaleDateString('fr-FR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                            </p>
                           </div>
+
                           <div className="text-right">
-                            <p className="font-extrabold text-emerald-700">+{inv.totalYield.toLocaleString()} FCFA</p>
-                            <span className="text-[9px] bg-slate-200 text-slate-600 px-1.5 py-0.5 rounded-lg font-bold">Terminé</span>
+                            {tx.type === 'deposit' && (
+                              <>
+                                {tx.status === 'PENDING' && (
+                                  <span className="bg-amber-50 text-amber-700 border border-amber-100 px-2.5 py-0.5 text-[9.5px] rounded-full font-bold">En examen</span>
+                                )}
+                                {tx.status === 'VALIDATED' && (
+                                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 text-[9.5px] rounded-full font-bold">Crédité ✅</span>
+                                )}
+                                {tx.status === 'REFUSED' && (
+                                  <span className="bg-rose-50 text-rose-700 border border-rose-150 px-2.5 py-0.5 text-[9.5px] rounded-full font-bold">Refusé ❌</span>
+                                )}
+                              </>
+                            )}
+                            {tx.type === 'withdrawal' && (
+                              <>
+                                {tx.status === 'PENDING' && (
+                                  <span className="bg-amber-50 text-amber-700 border border-amber-100 px-2.5 py-0.5 text-[9.5px] rounded-full font-bold">En attente</span>
+                                )}
+                                {tx.status === 'PAID' && (
+                                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 text-[9.5px] rounded-full font-bold">Payé 💰</span>
+                                )}
+                                {tx.status === 'REFUSED' && (
+                                  <span className="bg-rose-50 text-rose-700 border border-rose-150 px-2.5 py-0.5 text-[9.5px] rounded-full font-bold">Refusé ❌</span>
+                                )}
+                              </>
+                            )}
+                            {tx.type === 'revenue' && (
+                              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 text-[9.5px] rounded-full font-bold">Succès ✨</span>
+                            )}
+                            {tx.type === 'purchase' && (
+                              <>
+                                {tx.status === 'ACTIVE' && (
+                                  <span className="bg-amber-50 text-amber-700 border border-amber-100 px-2.5 py-0.5 text-[9.5px] rounded-full font-bold">En cours 🚜</span>
+                                )}
+                                {tx.status === 'COMPLETED' && (
+                                  <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-0.5 text-[9.5px] rounded-full font-bold">Terminé 🌾</span>
+                                )}
+                              </>
+                            )}
                           </div>
                         </div>
                       ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-            ),
-          },
-          {
-            id: 'deposits',
-            title: '📥 Historique des Dépôts',
-            icon: History,
-            badge: userDeps.length > 0 ? `${userDeps.length} virement(s)` : null,
-            content: (
-              <div className="space-y-2 font-sans text-xs">
-                {userDeps.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-4 text-center">Aucune transaction de dépôt déclarée.</p>
-                ) : (
-                  userDeps.map((dep) => (
-                    <div
-                      id={`user-deposit-${dep.id}`}
-                      key={dep.id}
-                      className="p-3 bg-white border border-slate-100 rounded-2xl flex justify-between items-center"
-                    >
-                      <div className="space-y-1">
-                        <div className="flex items-center gap-1.5">
-                          <span className="font-extrabold text-slate-800">{dep.amount.toLocaleString()} FCFA</span>
-                          <span className="bg-slate-100 text-slate-600 font-bold px-1.5 py-0.5 text-[9px] rounded-md">{dep.operator}</span>
-                        </div>
-                        <p className="text-[10px] text-slate-400">
-                          Déclaré le {new Date(dep.date).toLocaleDateString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-                        </p>
-                      </div>
-
-                      <div className="text-right">
-                        {dep.status === 'PENDING' && (
-                          <span className="bg-amber-50 text-amber-700 border border-amber-100 px-2 py-0.5 text-[10px] rounded-full font-bold">En examen</span>
-                        )}
-                        {dep.status === 'VALIDATED' && (
-                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2 py-0.5 text-[10px] rounded-full font-bold">Crédité ✅</span>
-                        )}
-                        {dep.status === 'REFUSED' && (
-                          <span className="bg-rose-50 text-rose-700 border border-rose-100 px-2 py-0.5 text-[10px] rounded-full font-bold">Refusé ❌</span>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            ),
-          },
-          {
-            id: 'withdrawals',
-            title: '💸 Historique des Retraits',
-            icon: ArrowDownCircle,
-            badge: userWiths.length > 0 ? `${userWiths.length} demande(s)` : null,
-            content: (
-              <div className="space-y-2 font-sans text-xs">
-                {userWiths.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-4 text-center font-sans">Aucun retrait demandé.</p>
-                ) : (
-                  userWiths.map((w) => (
-                    <div
-                      id={`user-withdrawal-${w.id}`}
-                      key={w.id}
-                      className="p-3 bg-white border border-slate-100 rounded-2xl flex justify-between items-center"
-                    >
-                      <div className="space-y-1">
-                        <p className="font-extrabold text-slate-800">{w.amount.toLocaleString()} FCFA</p>
-                        <p className="text-[10px] text-slate-400">Destinataire: {w.recipientName} ({w.recipientPhone})</p>
-                        <p className="text-[9px] text-slate-400">Demandé le {new Date(w.date).toLocaleDateString('fr-FR', { hour: '2-digit', minute: '2-digit' })}</p>
-                      </div>
-
-                      <div className="text-right">
-                        {w.status === 'PENDING' && (
-                          <span className="bg-amber-50 text-amber-700 border border-amber-100 px-2.5 py-0.5 text-[10px] rounded-full font-bold">En attente</span>
-                        )}
-                        {w.status === 'PAID' && (
-                          <span className="bg-emerald-50 text-emerald-700 border border-emerald-100 px-2.5 py-0.5 text-[10px] rounded-full font-bold">Payé 💰</span>
-                        )}
-                        {w.status === 'REFUSED' && (
-                          <span className="bg-rose-50 text-rose-700 border border-rose-100 px-2.5 py-0.5 text-[10px] rounded-full font-bold">Refusé ❌</span>
-                        )}
-                      </div>
-                    </div>
-                  ))
-                )}
-              </div>
-            ),
-          },
-          {
-            id: 'commissions',
-            title: '📈 Historique des Revenus',
-            icon: Coins,
-            badge: userComs.length > 0 ? `+${userComs.reduce((acc, c) => acc + c.amount, 0).toLocaleString()} FCFA` : null,
-            content: (
-              <div className="space-y-2.5 font-sans text-xs">
-                {userComs.length === 0 ? (
-                  <p className="text-xs text-slate-400 py-4 text-center">Aucune commission créditée pour l'instant.</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    <p className="text-[10px] uppercase font-bold tracking-wider text-slate-400 mb-1">Détail des commissions de parrainage :</p>
-                    {userComs.map((com) => (
-                      <div
-                        id={`user-commission-${com.id}`}
-                        key={com.id}
-                        className="p-3 bg-white border border-slate-100 rounded-2xl flex justify-between items-center"
-                      >
-                        <div>
-                          <p className="font-bold text-slate-700">Filleul: {com.referredName}</p>
-                          <span className="text-[9px] bg-emerald-50 text-emerald-800 border border-emerald-100 px-1.5 py-0.1 rounded-md">
-                            Niveau {com.level}
-                          </span>
-                        </div>
-                        <div className="text-right">
-                          <p className="font-extrabold text-emerald-700">+{com.amount.toLocaleString()} FCFA</p>
-                          <span className="font-mono text-[9px] text-slate-400">
-                            {new Date(com.date).toLocaleDateString('fr-FR')}
-                          </span>
-                        </div>
-                      </div>
-                    ))}
                   </div>
                 )}
               </div>
@@ -564,6 +842,209 @@ export const ProfileView: React.FC = () => {
                     </h5>
                     <p className="text-[9px] text-slate-400 mt-1 uppercase tracking-wider font-semibold">Membres Recommandés</p>
                   </div>
+                </div>
+              </div>
+            ),
+          },
+          {
+            id: 'settings',
+            title: '⚙️ Paramètres du Compte',
+            icon: Settings,
+            badge: 'Identité',
+            content: (
+              <div className="space-y-4 font-sans text-xs text-slate-700">
+                <div className="bg-slate-50 border border-slate-150 p-3 rounded-2xl text-[10px] text-slate-500 leading-relaxed font-semibold">
+                  🔒 Vos informations d'identification sont vérifiées et hautement sécurisées. Pour toute correction, veuillez contacter notre support officiellement.
+                </div>
+
+                <div className="space-y-3.5">
+                  <div className="space-y-1">
+                    <label className="block text-xxs font-black text-slate-400 uppercase tracking-wider">
+                      Nom complet de l'utilisateur
+                    </label>
+                    <div className="relative bg-slate-100 border border-slate-200 rounded-xl px-3 py-2.5 flex items-center justify-between select-none opacity-80">
+                      <span className="font-sans font-extrabold text-[#2a3042]">
+                        {currentUser.fullName}
+                      </span>
+                      <span className="text-[9px] font-bold text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                        🔒 Lecture seule
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className="space-y-1">
+                    <label className="block text-xxs font-black text-slate-400 uppercase tracking-wider">
+                      Numéro de téléphone de compte
+                    </label>
+                    <div className="relative bg-slate-100 border border-slate-200 rounded-xl px-3 py-2.5 flex items-center justify-between select-none opacity-80">
+                      <span className="font-mono font-bold text-[#2a3042]">
+                        {currentUser.phone}
+                      </span>
+                      <span className="text-[9px] font-bold text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                        🔒 Lecture seule
+                      </span>
+                    </div>
+                  </div>
+
+                  {currentUser.email && (
+                    <div className="space-y-1">
+                      <label className="block text-xxs font-black text-slate-400 uppercase tracking-wider">
+                        E-mail associé
+                      </label>
+                      <div className="relative bg-slate-100 border border-slate-200 rounded-xl px-3 py-2.5 flex items-center justify-between select-none opacity-80">
+                        <span className="font-mono text-[10.5px] text-[#2a3042] font-semibold">
+                          {currentUser.email}
+                        </span>
+                        <span className="text-[9px] font-bold text-slate-400 bg-slate-200 px-1.5 py-0.5 rounded-md flex items-center gap-1">
+                          🔒 Lecture seule
+                        </span>
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <div className="bg-amber-500/5 border border-amber-200/40 p-3 rounded-2xl text-center space-y-1.5">
+                  <p className="font-black text-[9.5px] text-amber-800 uppercase tracking-wide">💡 Sécurisation de Compte</p>
+                  <p className="text-[9px] text-slate-500 font-medium leading-relaxed">
+                    Afin d'éviter toute usurpation d'identité ou modification frauduleuse de coordonnées de paiement mobiles, la modification autonome de ces informations est inhibée.
+                  </p>
+                </div>
+              </div>
+            ),
+          },
+          {
+            id: 'install-pwa',
+            title: '📲 Installer cette Application',
+            icon: Smartphone,
+            badge: 'PWA Express',
+            content: (
+              <div className="space-y-4 font-sans text-xs text-slate-705 leading-relaxed">
+                <div className="bg-emerald-50 border border-emerald-100 p-3.5 rounded-2xl text-center space-y-2">
+                  <span className="text-2xl block animate-bounce">📱</span>
+                  <h5 className="font-extrabold text-slate-800 text-xs">
+                    Installez l'application AgriAfri sur votre mobile !
+                  </h5>
+                  <p className="text-[10px] text-slate-500 leading-relaxed font-semibold">
+                    Accédez instantanément à votre espace d'investissement participatif directement depuis votre écran d'accueil avec une expérience plus rapide, fluide et sans publicité. Économise votre forfait internet !
+                  </p>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const promptEvt = (window as any).deferredPrompt;
+                      if (promptEvt) {
+                        promptEvt.prompt();
+                        promptEvt.userChoice.then((choiceResult: any) => {
+                          if (choiceResult.outcome === 'accepted') {
+                            console.log('User accepted PWA installation');
+                          } else {
+                            console.log('User dismissed PWA installation');
+                          }
+                          (window as any).deferredPrompt = null;
+                        });
+                      } else {
+                        alert("Pour lancer l'installation, appuyez sur le bouton partage ou sur le menu ⁝ de votre navigateur comme indiqué ci-dessous.");
+                      }
+                    }}
+                    className="w-full mt-1.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] rounded-xl flex items-center justify-center gap-1.5 transition-colors cursor-pointer shadow-xs uppercase tracking-wide"
+                  >
+                    <Download className="w-4 h-4" />
+                    Installer Maintenant PWA
+                  </button>
+                </div>
+
+                {/* Android & iOS Walkthrough Cards */}
+                <div className="space-y-3">
+                  <h5 className="font-bold text-slate-850 text-[11px] uppercase tracking-wider pl-1 border-l-2 border-[#0c62e5]">
+                    Guide d'installation pas à pas :
+                  </h5>
+
+                  {/* Android Instruction */}
+                  <div className="bg-slate-50 border border-slate-100 p-3 rounded-2xl space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded-full font-extrabold text-[8px] uppercase">
+                        Android (Chrome / Brave)
+                      </span>
+                      <span className="text-base select-none">🤖</span>
+                    </div>
+                    <ol className="list-decimal pl-4 space-y-1 text-[10px] leading-relaxed text-slate-600 font-semibold">
+                      <li>Touchez l'icône de menu <strong className="text-slate-900">⁝ (trois points)</strong> dans le coin supérieur droit.</li>
+                      <li>Sélectionnez l'option <strong className="text-emerald-700">"Installer l'application"</strong> ou <strong className="text-slate-950">"Ajouter à l'écran d'accueil"</strong>.</li>
+                      <li>Confirmez l'installation et l'application sera disponible sur votre mobile !</li>
+                    </ol>
+                  </div>
+
+                  {/* iOS Instruction */}
+                  <div className="bg-slate-50 border border-slate-100 p-3 rounded-2xl space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="bg-amber-100 text-amber-800 px-2 py-0.5 rounded-full font-extrabold text-[8px] uppercase">
+                        iPhone / iPad (Safari)
+                      </span>
+                      <span className="text-base select-none">🍏</span>
+                    </div>
+                    <ol className="list-decimal pl-4 space-y-1 text-[10px] leading-relaxed text-slate-600 font-semibold">
+                      <li>Touchez le bouton de partage <strong className="text-slate-900">📤 (Partager)</strong> en bas de l'écran.</li>
+                      <li>Faites défiler vers le bas et sélectionnez <strong className="text-emerald-700">"Sur l'écran d'accueil" ➕</strong>.</li>
+                      <li>Appuyez sur <strong className="text-slate-950">"Ajouter"</strong> dans le coin supérieur droit pour valider !</li>
+                    </ol>
+                  </div>
+                </div>
+              </div>
+            ),
+          },
+          {
+            id: 'about',
+            title: 'ℹ️ À propos d\'Agrocapital',
+            icon: Info,
+            badge: 'Présentation',
+            content: (
+              <div className="space-y-3 font-sans text-xs text-slate-705 leading-relaxed">
+                <div className="bg-indigo-50/50 border border-indigo-100 p-3 rounded-2xl">
+                  <h5 className="font-extrabold text-indigo-900 text-xs mb-1">🌱 Qu'est-ce que Agrocapital ?</h5>
+                  <p className="text-[11px] text-slate-650">
+                    <strong>Agrocapital</strong> est une plateforme technologique d’investissement agricole participatif d'Afrique de l'Ouest. Nous permettons aux épargnants et investisseurs de financer directement des exploitations agricoles concrètes de haute qualité (cultures maraîchères, élevage bovin, aviculture, arboriculture) et d’obtenir des bénéfices stables et garantis.
+                  </p>
+                </div>
+
+                <div className="space-y-2">
+                  <h5 className="font-bold text-slate-800 text-[11px] uppercase tracking-wide">⚙️ Fonctionnement en 4 étapes :</h5>
+                  
+                  <div className="flex gap-2 items-start bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                    <span className="text-sm">1️⃣</span>
+                    <div>
+                      <p className="font-black text-slate-800 text-xxs uppercase">FONDER VOTRE PORTFOLIO</p>
+                      <p className="text-[10px] text-slate-500">Sélectionnez une catégorie disponible de production (Stabilité, Bien-être ou Activités) et investissez le prix d'achat initial à l'aide de votre solde.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 items-start bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                    <span className="text-sm">2️⃣</span>
+                    <div>
+                      <p className="font-black text-slate-800 text-xxs uppercase">EXPLOITATION SUR LE TERRAIN</p>
+                      <p className="text-[10px] text-slate-500">Nos experts agronomes et fermiers partenaires exploitent les terres cultivables grâce aux fonds mutualisés pour maximiser les rendements.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 items-start bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                    <span className="text-sm">3️⃣</span>
+                    <div>
+                      <p className="font-black text-slate-800 text-xxs uppercase">GÉNÉRATION DES DIVIDENDES</p>
+                      <p className="text-[10px] text-slate-500">Chaque produit dispose d'un cycle de vie défini (en jours). Votre investissement génère des bénéfices calculés quotidiennement, reversés sur votre solde de retrait.</p>
+                    </div>
+                  </div>
+
+                  <div className="flex gap-2 items-start bg-slate-50 p-2.5 rounded-xl border border-slate-100">
+                    <span className="text-sm">4️⃣</span>
+                    <div>
+                      <p className="font-black text-slate-800 text-xxs uppercase">RETRAIT DIRECT EN SÉCURITÉ</p>
+                      <p className="text-[10px] text-slate-500">Faites vos demandes de retrait de vos gains sous forme de monnaie électronique localisée (MTN, Wave, Moov, Orange, Flooz) traitées rapidement sous 15 min.</p>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="bg-amber-500/10 border border-amber-500/20 p-3 rounded-2xl text-center">
+                  <p className="font-bold text-amber-800 text-[10px] uppercase">🛡️ Securité & Garantie</p>
+                  <p className="text-[9px] text-slate-550 mt-1">Tous les cycles de cultures à financement partagé font l'objet d'une assurance récolte premium couvrant l'investissement de base à 100%.</p>
                 </div>
               </div>
             ),
@@ -628,7 +1109,7 @@ export const ProfileView: React.FC = () => {
       </div>
 
       {/* ================================= DEPOSIT DECLA MODAL ================================= */}
-      {showDepositModal && (
+      {showDepositModal && false && (
         <div id="deposit-modal-overlay" className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4 overflow-y-auto">
           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-100 animate-scale-up my-8">
             {/* Header */}
@@ -774,7 +1255,7 @@ export const ProfileView: React.FC = () => {
       )}
 
       {/* ================================= WITHDRAWAL DECLA MODAL ================================= */}
-      {showWithdrawModal && (
+      {showWithdrawModal && false && (
         <div id="withdraw-modal-overlay" className="fixed inset-0 bg-black/40 backdrop-blur-xs flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-100 animate-scale-up">
             {/* Header */}
@@ -917,8 +1398,8 @@ export const ProfileView: React.FC = () => {
               )}
             </form>
           </div>
-        </div>
-      )}
+         </div>
+       )}
     </div>
   );
 };

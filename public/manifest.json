@@ -1,0 +1,21 @@
+{
+  "short_name": "AgriAfri",
+  "name": "AgriAfri - Investissement Participatif",
+  "icons": [
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='192' height='192' viewBox='0 0 192 192'><rect width='192' height='192' rx='40' fill='%23059669'/><path d='M96 40 L140 100 H110 V150 H82 V100 H52 Z' fill='white'/></svg>",
+      "type": "image/svg+xml",
+      "sizes": "192x192"
+    },
+    {
+      "src": "data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='512' height='512' viewBox='0 0 512 512'><rect width='512' height='512' rx='110' fill='%23059669'/><path d='M256 100 L380 280 H300 V400 H212 V280 H132 Z' fill='white'/></svg>",
+      "type": "image/svg+xml",
+      "sizes": "512x512"
+    }
+  ],
+  "start_url": "/",
+  "background_color": "#059669",
+  "theme_color": "#059669",
+  "display": "standalone",
+  "orientation": "portrait"
+}

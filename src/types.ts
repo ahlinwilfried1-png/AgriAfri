@@ -79,6 +79,14 @@ export interface Withdrawal {
   status: 'PENDING' | 'PAID' | 'REFUSED';
 }
 
+export interface SupportMessage {
+  id: string;
+  sender: 'user' | 'admin';
+  text: string;
+  date: string;
+  image?: string;
+}
+
 export interface SupportTicket {
   id: string;
   userId: string;
@@ -89,7 +97,9 @@ export interface SupportTicket {
   reply?: string;
   screenshotImage?: string; // base64 representation of any attached file or deposit proof
   status: 'PENDING' | 'RESOLVED';
+  messageStatus?: 'NON_LU' | 'LU' | 'REPONDU';
   date: string;
+  messages?: SupportMessage[];
 }
 
 export interface Review {

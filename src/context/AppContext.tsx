@@ -19,7 +19,7 @@ import {
   checkProductOpen,
 } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_REVIEWS, DEFAULT_SETTINGS } from '../data/initialData';
-import { safeSyncToSupabase, safeDeleteFromSupabase } from '../lib/supabase';
+import { safeSyncToSupabase, safeDeleteFromSupabase, supabase } from '../lib/supabase';
 
 interface AppContextType {
   currentUser: User | null;
@@ -61,6 +61,9 @@ interface AppContextType {
   // Support Actions
   createTicket: (subject: 'Dépôt non crédité' | 'Assistance technique' | 'Retrait retardé' | 'Autre réclamation', message: string, screenshotImage?: string) => { success: boolean; message: string };
   replyToTicket: (id: string, reply: string) => void;
+  sendMessageInTicket: (id: string, text: string, sender: 'user' | 'admin', image?: string) => { success: boolean; message: string };
+  markTicketAsRead: (id: string) => void;
+  updateTicketStatus: (id: string, status: 'NON_LU' | 'LU' | 'REPONDU') => void;
 
   // Reviews CRUD
   addReview: (authorName: string, authorAvatar: string, rating: number, comment: string, imageUrl?: string) => void;
@@ -229,6 +232,132 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     }
   }, []);
 
+  // --- REAL-TIME SUPABASE SYNCHRONIZATION ---
+  useEffect(() => {
+    if (!supabase) return;
+
+    // Real-time listeners for database changes
+    const ticketsChannel = supabase
+      .channel('realtime-tickets-channel')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'tickets' },
+        (payload: any) => {
+          console.log('[SupabaseRealtime] Tickets event:', payload);
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const updated = payload.new as SupportTicket;
+            setTickets((prev) => {
+              const matches = prev.some((t) => t.id === updated.id);
+              let newList;
+              if (matches) {
+                newList = prev.map((t) => (t.id === updated.id ? updated : t));
+              } else {
+                newList = [updated, ...prev];
+              }
+              localStorage.setItem('agri_tickets', JSON.stringify(newList));
+              return newList;
+            });
+          } else if (payload.eventType === 'DELETE') {
+            const oldId = payload.old?.id;
+            if (oldId) {
+              setTickets((prev) => {
+                const newList = prev.filter((t) => t.id !== oldId);
+                localStorage.setItem('agri_tickets', JSON.stringify(newList));
+                return newList;
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    const depositsChannel = supabase
+      .channel('realtime-deposits-channel')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'deposits' },
+        (payload: any) => {
+          console.log('[SupabaseRealtime] Deposits event:', payload);
+          if (payload.eventType === 'INSERT' || payload.eventType === 'UPDATE') {
+            const updated = payload.new as Deposit;
+            setDeposits((prev) => {
+              const matches = prev.some((d) => d.id === updated.id);
+              let newList;
+              if (matches) {
+                newList = prev.map((d) => (d.id === updated.id ? updated : d));
+              } else {
+                newList = [updated, ...prev];
+              }
+              localStorage.setItem('agri_deposits', JSON.stringify(newList));
+              return newList;
+            });
+          } else if (payload.eventType === 'DELETE') {
+            const oldId = payload.old?.id;
+            if (oldId) {
+              setDeposits((prev) => {
+                const newList = prev.filter((d) => d.id !== oldId);
+                localStorage.setItem('agri_deposits', JSON.stringify(newList));
+                return newList;
+              });
+            }
+          }
+        }
+      )
+      .subscribe();
+
+    // Initial Fetch Synchronization
+    const fetchInitialLogs = async () => {
+      try {
+        const { data: remoteT, error: errT } = await supabase.from('tickets').select('*');
+        if (!errT && remoteT) {
+          setTickets((prev) => {
+            const merged = [...prev];
+            remoteT.forEach((rt: any) => {
+              const idx = merged.findIndex((t) => t.id === rt.id);
+              if (idx === -1) {
+                merged.push(rt as SupportTicket);
+              } else {
+                merged[idx] = rt as SupportTicket;
+              }
+            });
+            merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            localStorage.setItem('agri_tickets', JSON.stringify(merged));
+            return merged;
+          });
+        }
+
+        const { data: remoteD, error: errD } = await supabase.from('deposits').select('*');
+        if (!errD && remoteD) {
+          setDeposits((prev) => {
+            const merged = [...prev];
+            remoteD.forEach((rd: any) => {
+              const idx = merged.findIndex((d) => d.id === rd.id);
+              if (idx === -1) {
+                merged.push(rd as Deposit);
+              } else {
+                merged[idx] = rd as Deposit;
+              }
+            });
+            merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+            localStorage.setItem('agri_deposits', JSON.stringify(merged));
+            return merged;
+          });
+        }
+      } catch (e) {
+        console.warn('[SupabaseSync] Initial fetch failed:', e);
+      }
+    };
+
+    fetchInitialLogs();
+
+    return () => {
+      if (supabase) {
+        supabase.removeChannel(ticketsChannel);
+        supabase.removeChannel(depositsChannel);
+      }
+    };
+  }, []);
+
   // Sync state helpers to update local storage when state changes
   const saveUsers = (newUsers: User[]) => {
     setUsers(newUsers);
@@ -308,7 +437,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         reply: tick.reply || null,
         screenshotImage: tick.screenshotImage || null,
         status: tick.status,
+        messageStatus: tick.messageStatus || 'NON_LU',
         date: tick.date,
+        messages: tick.messages || [],
       });
     });
   };
@@ -374,8 +505,28 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'Ce numéro de téléphone est déjà enregistré.' };
     }
 
-    // Generate random code for new user parrainage
-    const randomCode = 'AGRI' + Math.floor(1000 + Math.random() * 9000).toString();
+    // Generate random code for new user parrainage (3 letters and 2 digits mixed)
+    const generateReferralCode = () => {
+      const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+      const digits = '0123456789';
+      const chars: string[] = [];
+      for (let i = 0; i < 3; i++) {
+        chars.push(letters.charAt(Math.floor(Math.random() * letters.length)));
+      }
+      for (let i = 0; i < 2; i++) {
+        chars.push(digits.charAt(Math.floor(Math.random() * digits.length)));
+      }
+      // Shuffle the characters so they are mixed
+      for (let i = chars.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        const temp = chars[i];
+        chars[i] = chars[j];
+        chars[j] = temp;
+      }
+      return chars.join('');
+    };
+
+    const randomCode = generateReferralCode();
 
     // Verify if referredCode is valid
     let referredBy: string | undefined;
@@ -938,8 +1089,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   ) => {
     if (!currentUser) return { success: false, message: 'Non connecté.' };
 
+    const ticketId = 't-' + Date.now();
+    const initialMsg = {
+      id: 'msg-init-' + ticketId,
+      sender: 'user' as const,
+      text: message,
+      date: new Date().toISOString(),
+      image: screenshotImage,
+    };
+
     const newTicket: SupportTicket = {
-      id: 't-' + Date.now(),
+      id: ticketId,
       userId: currentUser.id,
       userPhone: currentUser.phone,
       userFullName: currentUser.fullName,
@@ -947,7 +1107,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       message,
       screenshotImage,
       status: 'PENDING',
+      messageStatus: 'NON_LU',
       date: new Date().toISOString(),
+      messages: [initialMsg],
     };
 
     saveTickets([newTicket, ...tickets]);
@@ -955,31 +1117,96 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     return { success: true, message: 'Votre ticket support a été ouvert avec succès. Nos équipes vous répondront rapidement.' };
   };
 
-  // Support Reply (Admin Action)
-  const replyToTicket = (id: string, reply: string) => {
+  // Safe Back-and-forth Support Chat inside ticket
+  const sendMessageInTicket = (id: string, text: string, sender: 'user' | 'admin', image?: string) => {
+    let tUserFullName = '';
+    let tUserId = '';
+    let tSubject = '';
+    
     const modified = tickets.map((t) => {
       if (t.id === id) {
-        // Notification for the user
-        const answerNotif: Notification = {
-          id: 'n-' + Date.now() + '-ticketReply',
-          userId: t.userId,
-          title: 'Assistance client - Réponse reçue 🎧',
-          message: `Nouveau message d'assistance concernant votre ticket "${t.subject}": "${reply}"`,
+        tUserFullName = t.userFullName;
+        tUserId = t.userId;
+        tSubject = t.subject;
+        const currentMsgs = t.messages || [
+          {
+            id: 'msg-init-' + t.id,
+            sender: 'user' as const,
+            text: t.message,
+            date: t.date,
+            image: t.screenshotImage,
+          }
+        ];
+        const newMsg = {
+          id: 'msg-' + Date.now() + '-' + Math.random().toString(36).substring(2, 6),
+          sender,
+          text,
           date: new Date().toISOString(),
-          read: false,
+          image,
         };
-        saveNotifications([answerNotif, ...notifications]);
-
+        const nextMsgs = [...currentMsgs, newMsg];
+        
+        const isUser = sender === 'user';
         return {
           ...t,
-          reply,
-          status: 'RESOLVED' as const,
+          message: isUser ? text : t.message,
+          screenshotImage: isUser && image ? image : t.screenshotImage,
+          reply: !isUser ? text : t.reply,
+          status: isUser ? 'PENDING' : 'RESOLVED' as const,
+          messageStatus: isUser ? 'NON_LU' : 'REPONDU' as const,
+          messages: nextMsgs,
         };
       }
       return t;
     });
 
     saveTickets(modified);
+
+    // Send visual notification if replied by admin
+    if (sender === 'admin' && tUserId) {
+      const answerNotif: Notification = {
+        id: 'n-' + Date.now() + '-ticketReply',
+        userId: tUserId,
+        title: 'Assistance client - Nouveau message 🎧',
+        message: `Réponse reçue dans votre ticket d'assistance "${tSubject}": "${text}"`,
+        date: new Date().toISOString(),
+        read: false,
+      };
+      saveNotifications([answerNotif, ...notifications]);
+    }
+    
+    return { success: true, message: 'Message envoyé.' };
+  };
+
+  const markTicketAsRead = (id: string) => {
+    const modified = tickets.map((t) => {
+      if (t.id === id) {
+        return {
+          ...t,
+          messageStatus: 'LU' as const,
+        };
+      }
+      return t;
+    });
+    saveTickets(modified);
+  };
+
+  const updateTicketStatus = (id: string, status: 'NON_LU' | 'LU' | 'REPONDU') => {
+    const modified = tickets.map((t) => {
+      if (t.id === id) {
+        return {
+          ...t,
+          messageStatus: status,
+        };
+      }
+      return t;
+    });
+    saveTickets(modified);
+  };
+
+  // Support Reply (Admin Action, maps to sendMessageInTicket)
+  const replyToTicket = (id: string, reply: string) => {
+    sendMessageInTicket(id, reply, 'admin');
   };
 
   // Reviews CRUD
@@ -1142,6 +1369,9 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
         createTicket,
         replyToTicket,
+        sendMessageInTicket,
+        markTicketAsRead,
+        updateTicketStatus,
 
         addReview,
         updateReview,

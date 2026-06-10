@@ -20,7 +20,10 @@ import {
   AlertCircle,
   Copy,
   Share2,
-  Gift
+  Gift,
+  ShieldCheck,
+  HeartHandshake,
+  BookOpen
 } from 'lucide-react';
 
 interface HomeViewProps {
@@ -42,11 +45,29 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveTab }) => {
     addNotificationForUser
   } = useApp();
 
+  const [linkCopied, setLinkCopied] = useState(false);
+  const [showTeamDetails, setShowTeamDetails] = useState(false);
+
+  // Dynamic calculations for user's parrainage/referral circle levels
+  const level1Users = currentUser ? users.filter(u => u.referredBy === currentUser.referralCode) : [];
+  const level1Active = level1Users.filter(u => investments.some(inv => inv.userId === u.id && inv.status === 'ACTIVE'));
+
+  const level1Codes = level1Users.map(u => u.referralCode);
+  const level2Users = currentUser && level1Codes.length > 0 ? users.filter(u => u.referredBy && level1Codes.includes(u.referredBy)) : [];
+  const level2Active = level2Users.filter(u => investments.some(inv => inv.userId === u.id && inv.status === 'ACTIVE'));
+
+  const level2Codes = level2Users.map(u => u.referralCode);
+  const level3Users = currentUser && level2Codes.length > 0 ? users.filter(u => u.referredBy && level2Codes.includes(u.referredBy)) : [];
+  const level3Active = level3Users.filter(u => investments.some(inv => inv.userId === u.id && inv.status === 'ACTIVE'));
+
   const handleCopyLink = () => {
     if (!currentUser) return;
     const inviteLink = `${window.location.origin}/register?ref=${currentUser.referralCode}`;
     navigator.clipboard.writeText(inviteLink);
-    alert('Lien de parrainage copié avec succès ! \n' + inviteLink);
+    setLinkCopied(true);
+    setTimeout(() => {
+      setLinkCopied(false);
+    }, 2800);
   };
 
   const handleCopyCode = () => {
@@ -78,63 +99,50 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveTab }) => {
   const [ticketProof, setTicketProof] = useState<string>('');
   const ticketFileInputRef = useRef<HTMLInputElement>(null);
 
-  // Dual standalone modals for quick-action shortcuts
-  const [showRechargeModal, setShowRechargeModal] = useState(false);
-  const [showRetraitModal, setShowRetraitModal] = useState(false);
-  const [showWheelModal, setShowWheelModal] = useState(false);
+  // Standalone modals for quick-action shortcuts
+  const [showTasksModal, setShowTasksModal] = useState(false);
 
-  // Recharge workflow fields
-  const [recAmount, setRecAmount] = useState<number>(5000);
-  const [recOperator, setRecOperator] = useState<'Mobile Money' | 'Moov Money' | 'Flooz'>('Mobile Money');
-  const [recProof, setRecProof] = useState<string>('');
-  const [recSuccess, setRecSuccess] = useState('');
-  const [recError, setRecError] = useState('');
-  const recFileInputRef = useRef<HTMLInputElement>(null);
-
-  // Countries configuration
-  const countriesList = [
-    { flag: '🇨🇮', name: "Côte d'Ivoire", code: '+225' },
-    { flag: '🇹🇬', name: 'Togo', code: '+228' },
-    { flag: '🇧🇯', name: 'Bénin', code: '+229' },
-    { flag: '🇨🇲', name: 'Cameroun', code: '+237' },
-  ];
-
-  // Retrait workflow fields
-  const [retAmount, setRetAmount] = useState<number>(5000);
-  const [retCountry, setRetCountry] = useState(() => {
-    return countriesList.find(c => c.code === currentUser?.countryCode) || countriesList[0];
-  });
-  const [retPhone, setRetPhone] = useState(() => {
-    const defaultC = countriesList.find(c => c.code === currentUser?.countryCode) || countriesList[0];
-    return `${defaultC.code} `;
-  });
-  const [retSuccess, setRetSuccess] = useState('');
-  const [retError, setRetError] = useState('');
-
-  const handleRetCountryChange = (countryCode: string) => {
-    const chosen = countriesList.find(c => c.code === countryCode);
-    if (chosen) {
-      setRetCountry(chosen);
-      const rawNumber = retPhone.replace(/^\+\d+\s*/, '');
-      setRetPhone(`${chosen.code} ${rawNumber}`);
+  // Persisted task claiming array
+  const [claimedTasks, setClaimedTasks] = useState<string[]>(() => {
+    if (!currentUser) return [];
+    try {
+      const stored = localStorage.getItem(`claimed_tasks_${currentUser.id}`);
+      return stored ? JSON.parse(stored) : [];
+    } catch {
+      return [];
     }
+  });
+
+  const totalTaskCommissions = claimedTasks.reduce((acc, taskId) => {
+    if (taskId === 'task_10') return acc + 500;
+    if (taskId === 'task_20') return acc + 1000;
+    if (taskId === 'task_50') return acc + 3000;
+    return acc;
+  }, 0);
+
+  const handleClaimTask = (taskId: string, rewardAmount: number) => {
+    if (!currentUser) return;
+    if (claimedTasks.includes(taskId)) return;
+
+    // Credit rewards to the user balance and totalEarnings
+    updateUserBalance(currentUser.id, rewardAmount, 'add');
+    const updatedEarnings = (currentUser.totalEarnings || 0) + rewardAmount;
+    editUserDetail(currentUser.id, { totalEarnings: updatedEarnings });
+
+    const newClaimed = [...claimedTasks, taskId];
+    setClaimedTasks(newClaimed);
+    localStorage.setItem(`claimed_tasks_${currentUser.id}`, JSON.stringify(newClaimed));
+
+    addNotificationForUser(
+      currentUser.id,
+      "Récompense de Tâche " + (taskId === "task_10" ? "10" : taskId === "task_20" ? "20" : "50") + " Activations Réclamée ! 🎉",
+      `Félicitations ! Votre prime de ${rewardAmount.toLocaleString()} FCFA a été créditée avec succès.`
+    );
+
+    alert(`Félicitations ! Vous avez réclamé ${rewardAmount.toLocaleString()} FCFA de commission de tâche avec succès.`);
   };
 
-  // Roue de chance game states
-  const [isSpinning, setIsSpinning] = useState(false);
-  const [wheelRotation, setWheelRotation] = useState(0);
-  const [wheelResultMsg, setWheelResultMsg] = useState('');
 
-  const sectors = [
-    { label: '500 FCFA', value: 500, color: '#e11d48' },     // rose-600
-    { label: 'Perdu', value: 0, color: '#475569' },          // slate-600
-    { label: '2 500 FCFA', value: 2500, color: '#16a34a' },  // green-600
-    { label: '100 FCFA', value: 100, color: '#ea580c' },     // orange-600
-    { label: 'Perdu', value: 0, color: '#475569' },          // slate-600
-    { label: '5 000 FCFA', value: 5000, color: '#0284c7' },  // sky-600
-    { label: '300 FCFA', value: 300, color: '#d97706' },     // amber-600
-    { label: '10 000 FCFA', value: 10000, color: '#7c3aed' } // violet-600
-  ];
 
   // Local stats calculations
   const totalRealUsers = users.length + 32840;
@@ -176,199 +184,82 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveTab }) => {
     }
   };
 
-  const handleRecFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setRecProof(reader.result as string);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
 
-  const handleRecSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setRecSuccess('');
-    setRecError('');
-
-    if (recAmount <= 0) {
-      setRecError('Veuillez insérer un montant supérieur à 0.');
-      return;
-    }
-    if (!recProof) {
-      setRecError('Veuillez joindre la capture d\'écran de votre transfert mobile money (preuve de paiement obligatoire).');
-      return;
-    }
-
-    const res = requestDeposit(recAmount, recOperator, recProof);
-    if (res.success) {
-      setRecSuccess('Recharge enregistrée ! L\'administration créditera votre solde après vérification sous 15 minutes.');
-      setRecAmount(5000);
-      setRecProof('');
-      if (recFileInputRef.current) recFileInputRef.current.value = '';
-      setTimeout(() => {
-        setRecSuccess('');
-        setShowRechargeModal(false);
-      }, 5000);
-    } else {
-      setRecError(res.message);
-    }
-  };
-
-  const handleRetSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    setRetSuccess('');
-    setRetError('');
-
-    if (retAmount <= 0) {
-      setRetError('Montant invalide.');
-      return;
-    }
-    if (!retPhone.trim() || retPhone.trim() === retCountry.code) {
-      setRetError('Veuillez spécifier le numéro de téléphone Mobile Money.');
-      return;
-    }
-
-    const currentHour = new Date().getHours();
-    if (currentHour < settings.withdrawStartHour || currentHour >= settings.withdrawEndHour) {
-      setRetError(`Les retraits sont ouverts uniquement de ${settings.withdrawStartHour}h00 à ${settings.withdrawEndHour}h05.`);
-      return;
-    }
-
-    // Automatically construct a nice beneficiary string with the country chosen
-    const finalBeneficiaryName = `Retrait Mobile (${retCountry.name})`;
-
-    const res = requestWithdrawal(retAmount, retPhone, finalBeneficiaryName);
-    if (res.success) {
-      setRetSuccess('Demande de retrait reçue. Le virement est en cours de traitement par notre équipe financière.');
-      setRetAmount(5000);
-      setRetPhone(`${retCountry.code} `);
-      setTimeout(() => {
-        setRetSuccess('');
-        setShowRetraitModal(false);
-      }, 5000);
-    } else {
-      setRetError(res.message);
-    }
-  };
-
-  const spinWheel = () => {
-    if (isSpinning) return;
-    if (!currentUser) return;
-
-    const hasFreeSpin = currentUser.freeSpins !== undefined && currentUser.freeSpins > 0;
-
-    if (!hasFreeSpin && currentUser.balance < 500) {
-      alert("Solde insuffisant pour tourner la roue (coût: 500 FCFA). Veuillez inviter des amis pour cumuler des tours de roue gratuits !");
-      return;
-    }
-
-    // Spend spin payment or consume free spin
-    if (hasFreeSpin) {
-      editUserDetail(currentUser.id, { freeSpins: Math.max(0, (currentUser.freeSpins || 0) - 1) });
-    } else {
-      updateUserBalance(currentUser.id, -500, 'add');
-    }
-
-    setIsSpinning(true);
-    setWheelResultMsg('');
-
-    const sectorIndex = Math.floor(Math.random() * sectors.length);
-    const chosenSector = sectors[sectorIndex];
-    
-    // Choose rotation degree: spin at least 5 times and land on target slice (each slice is 45 deg)
-    const sectorAngle = 360 - (sectorIndex * 45) - 22.5;
-    const finalRot = wheelRotation + (360 * 6) + sectorAngle;
-    
-    setWheelRotation(finalRot);
-
-    setTimeout(() => {
-      setIsSpinning(false);
-      if (chosenSector.value > 0) {
-        updateUserBalance(currentUser.id, chosenSector.value, 'add');
-        setWheelResultMsg(`Félicitations 🎉 ! Vous avez gagné ${chosenSector.value.toLocaleString()} FCFA sur votre solde principal !`);
-        addNotificationForUser(
-          currentUser.id,
-          'Victoire Roue de Chance 🎡',
-          `Vous avez remporté ${chosenSector.value.toLocaleString()} FCFA sur la Roue de Chance ${hasFreeSpin ? '(Tour Gratuit de Parrainage utilisé !)' : '(coût spin: 500 FCFA)'}.`
-        );
-      } else {
-        setWheelResultMsg("Oh, c'est perdu pour cette fois 😮 ! Retentez votre chance !");
-        addNotificationForUser(
-          currentUser.id,
-          'Roue de Chance 🎡',
-          `Spin effectué ${hasFreeSpin ? 'gratuitement via un bonus de parrainage' : 'pour 500 FCFA'}. Aucun gain n'a été obtenu cette fois-ci.`
-        );
-      }
-    }, 4500);
-  };
 
   return (
-    <div id="home-view-container" className="animate-fade-in space-y-6 pb-24">
+    <div id="home-view-container" className="animate-fade-in space-y-5 pb-24 relative">
       
-      {/* 🚀 WELCOME BANNER & STATISTICS (ROCKY GOLD THEME) */}
+      {linkCopied && (
+        <div id="home-copied-toast animate-bounce" className="fixed top-5 left-1/2 -translate-x-1/2 z-50 bg-emerald-600 text-white text-[11px] font-sans font-extrabold tracking-wide px-4 py-2 rounded-full shadow-lg border border-emerald-400/30 flex items-center justify-center gap-1.5">
+          <span>🤝</span>
+          <span>Lien de parrainage copié avec succès</span>
+        </div>
+      )}
+      
+      {/* 🚀 WELCOME BANNER (AGRO RÉCOLTE THEME) */}
       <div 
-        className="relative rounded-3xl p-6 overflow-hidden text-center flex flex-col items-center justify-center min-h-[170px] bg-slate-950 border border-amber-900/40 shadow-xl"
+        className="relative rounded-3xl p-6 overflow-hidden text-center flex flex-col items-center justify-center min-h-[175px] bg-slate-950 border border-emerald-900/40 shadow-xl"
         style={{
-          backgroundImage: "radial-gradient(circle at center, rgba(139, 92, 26, 0.45) 0%, rgba(9, 9, 11, 0.98) 100%)"
+          backgroundImage: "linear-gradient(to bottom, rgba(0,0,0,0.4) 0%, rgba(0,0,0,0.75) 100%), url('https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&q=80&w=600')",
+          backgroundSize: 'cover',
+          backgroundPosition: 'center',
         }}
       >
-        {/* Glowing orbs */}
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-40 h-40 bg-amber-500/20 rounded-full blur-2xl pointer-events-none animate-pulse" />
+        {/* Glow effect */}
+        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-44 h-44 bg-emerald-500/25 rounded-full blur-3xl pointer-events-none animate-pulse" />
         
-        <h1 className="font-sans font-black text-3xl sm:text-4xl uppercase tracking-[0.15em] text-transparent bg-clip-text bg-gradient-to-b from-amber-200 via-yellow-400 to-amber-600 filter drop-shadow-[0_2px_12px_rgba(245,158,11,0.5)]">
-          ROCKY GOLD
+        <h1 className="font-sans font-black text-3.5xl sm:text-4xl uppercase tracking-[0.1em] text-transparent bg-clip-text bg-gradient-to-b from-emerald-100 via-emerald-300 to-teal-500 filter drop-shadow-[0_2px_10px_rgba(16,185,129,0.5)]">
+          AGRO RÉCOLTE
         </h1>
-        <p className="font-sans font-extrabold text-[9px] uppercase tracking-[0.3em] text-amber-500/80 mt-1.5">
-          STRENGTH. VALUE. LEGACY.
+        <p className="font-sans font-extrabold text-[9px] uppercase tracking-[0.3em] text-emerald-400/95 mt-1.5">
+          CONFIANCE. RENDEMENT. PROSPÉRITÉ.
         </p>
 
         {/* Float user balance pill */}
         <div className="mt-4 px-4 py-1.5 bg-white/10 backdrop-blur-md rounded-full border border-white/10 flex items-center gap-1.5">
-          <span className="w-1.5 h-1.5 rounded-full bg-amber-400 animate-ping"></span>
-          <span className="text-[10px] font-sans font-bold text-amber-300 uppercase tracking-wider">Solde:</span>
+          <span className="w-1.5 h-1.5 rounded-full bg-emerald-450 animate-ping"></span>
+          <span className="text-[10px] font-sans font-bold text-emerald-300 uppercase tracking-wider">Solde:</span>
           <span className="font-mono text-xs font-black text-white">{currentUser ? currentUser.balance.toLocaleString('fr-FR') : '0'} FCFA</span>
         </div>
       </div>
 
       {/* 💳 DYNAMIC SHORTCUT ACTIONS (RECHARGE, RETRAIT, MON ÉQUIPE, TELEGRAM) */}
-      <div className="bg-[#eceff3] rounded-3xl p-4.5 flex justify-between items-center gap-2">
+      <div className="bg-white/80 backdrop-blur-md rounded-3xl p-4.5 flex justify-between items-center gap-2 border border-white/40 shadow-xs">
         {/* 1. Recharger */}
         <button
-          onClick={() => setShowRechargeModal(true)}
+          onClick={() => setActiveTab('recharge')}
           className="flex flex-col items-center flex-1 focus:outline-none group cursor-pointer"
         >
-          <div className="w-12 h-12 rounded-2xl bg-[#ccd5fe] flex items-center justify-center transition-transform hover:scale-105 active:scale-95 shadow-xs">
-            <Coins className="w-6 h-6 text-[#3b52d9]" />
+          <div className="w-13 h-13 rounded-full bg-[#ccd5fe]/70 border border-blue-200/30 flex items-center justify-center transition-transform hover:scale-105 active:scale-95 shadow-2xs">
+            <Coins className="w-6 h-6 text-[#1b63eb] stroke-[2.25]" />
           </div>
-          <span className="text-[11px] font-sans font-extrabold text-[#2a3042] mt-2 select-none">
+          <span className="text-[11px] font-sans font-extrabold text-[#4c5a71] mt-2 select-none">
             Recharger
           </span>
         </button>
 
         {/* 2. Retirer */}
         <button
-          onClick={() => setShowRetraitModal(true)}
+          onClick={() => setActiveTab('retrait')}
           className="flex flex-col items-center flex-1 focus:outline-none group cursor-pointer"
         >
-          <div className="w-12 h-12 rounded-2xl bg-[#ccd5fe] flex items-center justify-center transition-transform hover:scale-105 active:scale-95 shadow-xs">
-            <TrendingUp className="w-6 h-6 text-[#3b52d9]" />
+          <div className="w-13 h-13 rounded-full bg-[#ccd5fe]/70 border border-blue-200/30 flex items-center justify-center transition-transform hover:scale-105 active:scale-95 shadow-2xs">
+            <TrendingUp className="w-6 h-6 text-[#1b63eb] stroke-[2.25]" />
           </div>
-          <span className="text-[11px] font-sans font-extrabold text-[#2a3042] mt-2 select-none">
+          <span className="text-[11px] font-sans font-extrabold text-[#4c5a71] mt-2 select-none">
             Retirer
           </span>
         </button>
 
-        {/* 3. Mon Équipe */}
+        {/* 3. Mon Équipe (Triggers the combined Team Dashboard automatically) */}
         <button
-          onClick={() => setActiveTab('moi')}
+          onClick={() => setShowTeamDetails(true)}
           className="flex flex-col items-center flex-1 focus:outline-none group cursor-pointer"
         >
-          <div className="w-12 h-12 rounded-2xl bg-[#ccd5fe] flex items-center justify-center transition-transform hover:scale-105 active:scale-95 shadow-xs">
-            <Users className="w-6 h-6 text-[#3b52d9]" />
+          <div className="w-13 h-13 rounded-full bg-[#ccd5fe]/70 border border-blue-200/30 flex items-center justify-center transition-transform hover:scale-105 active:scale-95 shadow-2xs" id="btn-shortcut-team">
+            <Users className="w-6 h-6 text-[#1b63eb] stroke-[2.25]" />
           </div>
-          <span className="text-[11px] font-sans font-extrabold text-[#2a3042] mt-2 select-none">
+          <span className="text-[11px] font-sans font-extrabold text-[#4c5a71] mt-2 select-none">
             Mon Équipe
           </span>
         </button>
@@ -380,109 +271,216 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveTab }) => {
           rel="noreferrer"
           className="flex flex-col items-center flex-1 focus:outline-none group text-center"
         >
-          <div className="w-12 h-12 rounded-2xl bg-[#ccd5fe] flex items-center justify-center transition-transform hover:scale-105 active:scale-95 shadow-xs mx-auto">
-            <Send className="w-6 h-6 text-[#3b52d9]" />
+          <div className="w-13 h-13 rounded-full bg-[#ccd5fe]/70 border border-blue-200/30 flex items-center justify-center transition-transform hover:scale-105 active:scale-95 shadow-2xs mx-auto">
+            <Send className="w-6 h-6 text-[#1b63eb] stroke-[2.25]" />
           </div>
-          <span className="text-[11px] font-sans font-extrabold text-[#2a3042] mt-2 select-none">
+          <span className="text-[11px] font-sans font-extrabold text-[#4c5a71] mt-2 select-none">
             Telegram
           </span>
         </a>
       </div>
 
       {/* 🤝 SECTION DE PARRAINAGE ET RECOMMANDATION (Récompenses d'invitation) */}
-      <div className="relative bg-white border border-slate-200/60 rounded-3xl p-5 shadow-xs space-y-4">
-        {/* Floating yellow present icon top-right */}
-        <div className="absolute top-4 right-4 bg-amber-500 text-white p-2 rounded-xl shadow-xs">
-          <Gift className="w-4 h-4 text-white" />
+      <div className="relative bg-white border border-slate-150 rounded-2xl p-4 shadow-xs space-y-3">
+        {/* Yellow/Orange flower/star badge on the right matching mockup */}
+        <div className="absolute top-4 right-4 text-amber-500 text-base">
+          🌟
         </div>
 
         <div>
-          <h3 className="font-sans font-black text-sm text-[#2a324b] tracking-tight">
+          <h3 className="font-sans font-black text-xs text-[#2a3042] tracking-tight">
             Récompenses d'invitation
           </h3>
-          <p className="text-[11px] font-sans font-semibold text-slate-400 mt-0.5 leading-tight">
+          <p className="text-[9.5px] font-sans font-semibold text-slate-400 leading-tight">
             Investissez ensemble, enrichissez-vous ensemble
           </p>
         </div>
 
-        <div className="bg-[#f0f4f9] rounded-2xl p-3 flex justify-between items-center gap-3">
-          <div className="flex items-center gap-3 overflow-hidden">
-            <div className="w-9 h-9 rounded-full bg-indigo-50 border border-indigo-100 flex items-center justify-center text-indigo-600 shrink-0">
-              <Share2 className="w-4 h-4" />
-            </div>
-            <div className="overflow-hidden">
-              <span className="text-[10px] text-slate-400 font-bold block uppercase leading-none">Lien d'invitation</span>
-              <span className="text-xs font-semibold text-[#3b52d9] font-mono block mt-1 truncate max-w-[200px]">
-                {`${window.location.origin}/register?ref=${currentUser?.referralCode || 'OK937'}`}
-              </span>
-            </div>
-          </div>
-          <button
-            type="button"
-            onClick={handleCopyLink}
-            className="px-4 py-2 bg-[#9c2b2b] hover:bg-[#b03030] text-white rounded-3xl text-xs font-sans font-black tracking-wide select-none shadow-xs transition-colors cursor-pointer shrink-0"
-          >
-            Copier
-          </button>
-        </div>
-      </div>
-
-      {/* 🎡 CENTRE D'ACTIVITÉS DE BIEN-ÊTRE (Roue & Tâches) */}
-      <div className="bg-white border border-slate-200/60 rounded-3xl p-5 shadow-xs space-y-4">
-        <h3 className="font-sans font-black text-sm text-[#2a324b] tracking-tight">
-          Centre d'activités de bien-être
-        </h3>
-
-        <div className="space-y-3.5">
-          {/* Item 1: Roue de la chance */}
-          <div className="flex items-center justify-between gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
-            <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-orange-100/60 flex items-center justify-center text-lg shadow-inner">
-                🎡
+        <div className="space-y-2">
+          {/* 1. Code d'invitation Row as in Screenshot */}
+          <div className="bg-[#fafaff] border border-slate-100 rounded-xl p-2.5 flex justify-between items-center gap-3">
+            <div className="flex items-center gap-2.5 overflow-hidden">
+              <div className="w-8 h-8 rounded-full bg-rose-150/70 flex items-center justify-center text-sm text-rose-500 shrink-0 select-none">
+                🔗
               </div>
-              <div>
-                <h4 className="font-sans font-extrabold text-xs text-slate-800 leading-none">
-                  Roue de la chance
-                </h4>
-                <p className="text-[10px] text-slate-400 mt-1.5 leading-normal font-sans">
-                  Taux de gain du tirage au sort de 100%
-                </p>
+              <div className="overflow-hidden">
+                <span className="text-[9.5px] text-slate-400 font-bold block uppercase leading-none">Code d'invitation</span>
+                <span className="text-xs font-black text-slate-800 font-mono block mt-1 tracking-wider uppercase">
+                  {currentUser?.referralCode || 'DA9DF4'}
+                </span>
               </div>
             </div>
-            
             <button
+              id="btn-copy-code-home"
               type="button"
-              onClick={() => setShowWheelModal(true)}
-              className="px-3.5 py-2 bg-[#9c2b2b] hover:bg-[#b03030] text-white rounded-3xl text-xxs font-sans font-black uppercase shrink-0 transition-colors cursor-pointer"
+              onClick={handleCopyCode}
+              className="px-4.5 py-1.5 bg-[#ea5454] hover:bg-rose-600 text-white rounded-full text-[11px] font-sans font-black tracking-wide select-none shadow-2xs transition-all active:scale-95 cursor-pointer shrink-0"
             >
-              Tirage au sort
+              Copier
             </button>
           </div>
 
-          {/* Item 2: Récompenses de tâches */}
-          <div className="flex items-center justify-between gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-100">
+          {/* 2. Lien d'invitation Row as in Screenshot */}
+          <div className="bg-[#fafaff] border border-slate-100 rounded-xl p-2.5 flex justify-between items-center gap-3">
+            <div className="flex items-center gap-2.5 overflow-hidden">
+              <div className="w-8 h-8 rounded-full bg-indigo-150/70 flex items-center justify-center text-sm text-indigo-500 shrink-0 select-none">
+                🚀
+              </div>
+              <div className="overflow-hidden">
+                <span className="text-[9.5px] text-slate-400 font-bold block uppercase leading-none">Lien d'invitation</span>
+                <span className="text-[11px] font-semibold text-[#1b63eb] font-mono block mt-1 truncate max-w-[155px] sm:max-w-xs">
+                  {`${window.location.origin}/register?ref=${currentUser?.referralCode || 'DA9DF4'}`}
+                </span>
+              </div>
+            </div>
+            <button
+              id="btn-copy-link-home"
+              type="button"
+              onClick={handleCopyLink}
+              className="px-4.5 py-1.5 bg-[#ea5454] hover:bg-rose-600 text-white rounded-full text-[11px] font-sans font-black tracking-wide select-none shadow-2xs transition-all active:scale-95 cursor-pointer shrink-0"
+            >
+              Copier
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* 🤝 PROGRAMME DE RÉCOMPENSES DE CONTRATS & TÂCHES (Tasks Rewards Only) */}
+      <div className="bg-white border border-slate-200/60 rounded-3xl p-5 shadow-xs space-y-4">
+        <h3 className="font-sans font-black text-sm text-[#2a3042] tracking-tight">
+          🤝 Programme de Fidélité AgriAfri
+        </h3>
+
+        <div className="space-y-3">
+          <div 
+            onClick={() => setShowTasksModal(true)}
+            className="flex items-center justify-between gap-3 bg-slate-50 p-3.5 rounded-2xl border border-slate-100 cursor-pointer transition-colors hover:bg-slate-100/80 active:scale-99"
+          >
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-sky-100/60 flex items-center justify-center text-lg shadow-inner">
-                📬
+              <div className="w-10 h-10 rounded-xl bg-emerald-50 flex items-center justify-center text-lg shadow-inner text-emerald-600">
+                🎁
               </div>
               <div>
-                <h4 className="font-sans font-extrabold text-xs text-slate-800 leading-none">
-                  Récompenses de tâches
+                <h4 className="font-sans font-extrabold text-xs text-slate-850 leading-none">
+                  Primes & Récompenses de tâches
                 </h4>
                 <p className="text-[10px] text-slate-400 mt-1.5 leading-normal font-sans pr-2">
-                  Complétez des tâches et gagnez un salaire supplémentaire
+                  Encouragez le développement agricole et obtenez des bourses d'incitation journalières.
                 </p>
               </div>
             </div>
             
             <button
+              id="btn-tasks-home-trigger"
               type="button"
-              onClick={() => setActiveTab('moi')}
-              className="px-4 py-2 bg-[#9c2b2b] hover:bg-[#b03030] text-white rounded-3xl text-xxs font-sans font-black uppercase shrink-0 transition-colors cursor-pointer"
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowTasksModal(true);
+              }}
+              className="px-5 py-2 bg-[#1b63eb] hover:bg-blue-700 text-white rounded-full text-[10px] font-sans font-black tracking-wide uppercase shrink-0 transition-colors cursor-pointer"
             >
               Aller
             </button>
           </div>
+        </div>
+      </div>
+
+      {/* 🛡️ SÉCURITÉ ET ENGAGEMENT PROFESSIONNEL AGRIAFRI */}
+      <div className="bg-white border border-slate-150 rounded-3xl p-5 shadow-[0_8px_30px_rgb(0,0,0,0.02)] space-y-5">
+        <div className="flex items-center gap-3 border-b border-slate-100 pb-3">
+          <div className="w-9 h-9 rounded-xl bg-emerald-50 flex items-center justify-center text-emerald-600">
+            <ShieldCheck className="w-5 h-5" />
+          </div>
+          <div>
+            <h3 className="font-display font-black text-xs text-slate-800 uppercase tracking-wider">
+              🛡️ Investissement Garanti & Sécurisé
+            </h3>
+            <p className="text-[9px] font-sans font-semibold text-emerald-600 uppercase tracking-widest mt-0.5">
+              Agrément Coopérative Agricole d'État
+            </p>
+          </div>
+        </div>
+
+        {/* Dynamic Trust Stats Grid */}
+        <div className="grid grid-cols-3 gap-2.5">
+          <div className="bg-slate-50 border border-slate-100 p-3 rounded-2xl text-center">
+            <span className="text-emerald-600 text-base font-black font-mono block">52K+</span>
+            <span className="text-[8px] font-sans font-bold text-slate-400 uppercase tracking-tight block mt-1">Actifs</span>
+          </div>
+          <div className="bg-slate-50 border border-slate-100 p-3 rounded-2xl text-center">
+            <span className="text-emerald-700 text-base font-black font-mono block">98.7%</span>
+            <span className="text-[8px] font-sans font-bold text-slate-400 uppercase tracking-tight block mt-1">Rendements</span>
+          </div>
+          <div className="bg-slate-50 border border-slate-100 p-3 rounded-2xl text-center">
+            <span className="text-amber-600 text-base font-black font-mono block">1.5B+</span>
+            <span className="text-[8px] font-sans font-bold text-slate-400 uppercase tracking-tight block mt-1">FCFA Versés</span>
+          </div>
+        </div>
+
+        {/* Bento Trust Elements */}
+        <div className="space-y-3 font-sans">
+          <div className="flex items-start gap-3 bg-emerald-50/20 p-3 rounded-2xl border border-emerald-50">
+            <div className="p-1.5 bg-emerald-500 text-white rounded-lg select-none shrink-0 text-xs">
+              🌾
+            </div>
+            <div className="space-y-0.5">
+              <h4 className="text-[11px] font-black text-slate-800 leading-tight">Projets Agro-concrets</h4>
+              <p className="text-[9.5px] text-slate-500 font-semibold leading-relaxed">
+                Chaque franc investi est directement alloué au financement de matériel (poulaillers, forages solaires, engrais organiques) et à l'achat de récoltes garanties sur contrat d'achat d'État.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 bg-amber-50/25 p-3 rounded-2xl border border-amber-50">
+            <div className="p-1.5 bg-amber-500 text-white rounded-lg select-none shrink-0 text-xs">
+              🤝
+            </div>
+            <div className="space-y-0.5">
+              <h4 className="text-[11px] font-black text-slate-800 leading-tight">Zéro Risque Climatique</h4>
+              <p className="text-[9.5px] text-slate-500 font-semibold leading-relaxed">
+                Grâce à notre fonds mutuel d'assurance agricole partenaire (Axa & Saham Assurances), vos rendements de base restent garantis même en cas d'imprévu météorologique ou de sécheresse.
+              </p>
+            </div>
+          </div>
+
+          <div className="flex items-start gap-3 bg-blue-50/20 p-3 rounded-2xl border border-blue-50">
+            <div className="p-1.5 bg-blue-600 text-white rounded-lg select-none shrink-0 text-xs">
+              📱
+            </div>
+            <div className="space-y-0.5">
+              <h4 className="text-[11px] font-black text-slate-800 leading-tight">Transactions Traçables & Instantanées</h4>
+              <p className="text-[9.5px] text-slate-500 font-semibold leading-relaxed">
+                Dépôts et retraits ultra-rapides via Orange Money, MTN Mobile Money, Moov Flooz et Wave. Vos requêtes sont créditées en moins de 15 minutes avec traçabilité par reçu numérique.
+              </p>
+            </div>
+          </div>
+        </div>
+
+        {/* Dynamic Educational Expandable Questions */}
+        <div className="border-t border-slate-100 pt-3 space-y-2">
+          <h4 className="font-display font-bold text-[10px] text-slate-400 uppercase tracking-widest mb-1 pl-1">
+            💡 Guide de l'investisseur averti
+          </h4>
+          
+          <details className="group border border-slate-100 rounded-xl bg-slate-50 overflow-hidden cursor-pointer">
+            <summary className="p-2.5 flex items-center justify-between text-[10.5px] font-black text-slate-700 select-none">
+              <span>Comment fonctionne le cycle de rendement ?</span>
+              <span className="text-slate-400 group-open:rotate-180 transition-transform">▼</span>
+            </summary>
+            <p className="p-2.5 bg-white border-t border-slate-50 text-[10px] text-slate-500 leading-relaxed font-semibold">
+              Lorsque vous activez un produit d'investissement (par exemple le maïs ou l'élevage de volailles), les fonds sont alloués aux fermiers locaux. Les gains s'accumulent de manière journalière ou cyclique. Vous pouvez retirer vos intérêts directement à tout moment vers votre portefeuille mobile.
+            </p>
+          </details>
+
+          <details className="group border border-slate-100 rounded-xl bg-slate-50 overflow-hidden cursor-pointer">
+            <summary className="p-2.5 flex items-center justify-between text-[10.5px] font-black text-slate-700 select-none">
+              <span>Puis-je parrainer des amis et gagner des commissions ?</span>
+              <span className="text-slate-400 group-open:rotate-180 transition-transform">▼</span>
+            </summary>
+            <p className="p-2.5 bg-white border-t border-slate-50 text-[10px] text-slate-500 leading-relaxed font-semibold">
+              Oui ! AgriAfri propose un système de recommandation généreux à 3 niveaux. Vous gagnez des commissions directes sur chaque dépôt de vos filleuls de niveau 1 (10%), niveau 2 (5%), et niveau 3 (2%), en plus des tours gratuits sur la Roue de la chance !
+            </p>
+          </details>
         </div>
       </div>
 
@@ -552,362 +550,9 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveTab }) => {
         </div>
       </div>
 
-      {/* RECHARGE / DÉPÔT SHORTCUT MODAL */}
-      {showRechargeModal && (
-        <div id="shortcut-deposit-overlay" className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-200">
-            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-emerald-500/5">
-              <div className="flex items-center gap-2">
-                <Coins className="w-4 h-4 text-emerald-600" />
-                <h3 className="font-display font-extrabold text-slate-850 text-sm">
-                  Effectuer une Recharge (Dépôt)
-                </h3>
-              </div>
-              <button
-                id="close-shortcut-deposit"
-                onClick={() => setShowRechargeModal(false)}
-                className="w-7 h-7 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full flex items-center justify-center font-bold text-xs"
-              >
-                ✕
-              </button>
-            </div>
+      {/* Standalone pages handles Deposit and Withdrawal now */}
 
-            <form onSubmit={handleRecSubmit} className="p-5 space-y-4">
-              <div>
-                <label className="block text-xs font-sans font-bold text-slate-600 mb-1">
-                  1. Choisir l'opérateur Mobile Money
-                </label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['Mobile Money', 'Moov Money', 'Flooz'] as const).map((op) => (
-                    <button
-                      id={`rec-op-${op}`}
-                      key={op}
-                      type="button"
-                      onClick={() => setRecOperator(op)}
-                      className={`py-2 px-1 rounded-xl text-[10px] font-sans font-bold transition-all border ${
-                        recOperator === op
-                          ? 'bg-emerald-600 text-white border-emerald-600'
-                          : 'bg-white text-slate-500 border-slate-200 hover:bg-slate-50'
-                      }`}
-                    >
-                      {op === 'Mobile Money' ? 'Wave/MTN' : op}
-                    </button>
-                  ))}
-                </div>
-                {/* Visual operator info display */}
-                <div className="bg-emerald-50 border border-emerald-100 p-2.5 rounded-xl text-[10px] text-emerald-800 mt-2">
-                  <span className="font-bold">Numéro de transfert : </span>
-                  <span className="font-mono">{recOperator === 'Mobile Money' ? settings.operatorPhones.mobileMoney : recOperator === 'Moov Money' ? settings.operatorPhones.moovMoney : settings.operatorPhones.flooz}</span>
-                </div>
-              </div>
 
-              <div>
-                <label className="block text-xs font-sans font-bold text-slate-600 mb-1">
-                  2. Montant du transfert (FCFA)
-                </label>
-                <input
-                  id="rec-amount"
-                  type="number"
-                  required
-                  min={500}
-                  step={500}
-                  value={recAmount}
-                  onChange={(e) => setRecAmount(Number(e.target.value))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-sans font-semibold outline-none focus:border-emerald-650"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-sans font-bold text-slate-600 mb-1">
-                  3. Preuve de paiement (Screenshot)
-                </label>
-                <div 
-                  onClick={() => recFileInputRef.current?.click()}
-                  className="border-2 border-dashed border-slate-200 hover:border-emerald-500 rounded-xl p-3 text-center cursor-pointer hover:bg-slate-50 transition-colors"
-                >
-                  <input
-                    id="shortcut-rec-file"
-                    type="file"
-                    ref={recFileInputRef}
-                    accept="image/*"
-                    onChange={handleRecFileChange}
-                    className="hidden"
-                  />
-                  {recProof ? (
-                    <div className="space-y-1">
-                      <p className="text-[10px] text-emerald-600 font-bold">Lien image validé !</p>
-                      <img src={recProof} alt="Proof" className="max-h-20 mx-auto object-cover rounded" referrerPolicy="no-referrer" />
-                    </div>
-                  ) : (
-                    <p className="text-[10px] text-slate-400">
-                      Cliquez pour ajouter l'image du transfert
-                    </p>
-                  )}
-                </div>
-              </div>
-
-              {recSuccess && (
-                <p className="text-xs bg-emerald-50 border border-emerald-100 text-emerald-800 p-2.5 rounded-xl text-center font-medium leading-relaxed">
-                  {recSuccess}
-                </p>
-              )}
-              {recError && (
-                <p className="text-xs bg-rose-50 border border-rose-100 text-rose-800 p-2.5 rounded-xl text-center font-medium leading-relaxed">
-                  {recError}
-                </p>
-              )}
-
-              <div className="flex gap-2">
-                <button
-                  id="shortcut-rec-cancel"
-                  type="button"
-                  onClick={() => setShowRechargeModal(false)}
-                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-sans font-bold"
-                >
-                  Annuler
-                </button>
-                <button
-                  id="shortcut-rec-submit"
-                  type="submit"
-                  className="flex-1 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-display font-extrabold shadow"
-                >
-                  Déclarer Dépôt
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* WITHDRAWAL / RETRAIT SHORTCUT MODAL */}
-      {showRetraitModal && (
-        <div id="shortcut-withdraw-overlay" className="fixed inset-0 bg-black/50 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-200">
-            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-amber-500/5">
-              <div className="flex items-center gap-2">
-                <TrendingUp className="w-4 h-4 text-amber-500" />
-                <h3 className="font-display font-extrabold text-slate-850 text-sm">
-                  Effectuer un Retrait (Virement)
-                </h3>
-              </div>
-              <button
-                id="close-shortcut-withdraw"
-                onClick={() => setShowRetraitModal(false)}
-                className="w-7 h-7 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full flex items-center justify-center font-bold text-xs"
-              >
-                ✕
-              </button>
-            </div>
-
-            <form onSubmit={handleRetSubmit} className="p-5 space-y-4">
-              {/* Country Selector */}
-              <div>
-                <label className="block text-xs font-sans font-bold text-slate-600 mb-1">
-                  1. Sélectionner le Pays de Réception
-                </label>
-                <select
-                  id="ret-country-select"
-                  value={retCountry.code}
-                  onChange={(e) => handleRetCountryChange(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-sans font-semibold outline-none focus:border-amber-500 cursor-pointer"
-                >
-                  {countriesList.map((c) => (
-                    <option key={c.code} value={c.code}>
-                      {c.flag} {c.name} ({c.code})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              {/* Mobile Money Number with Dial Prefix */}
-              <div>
-                <label className="block text-xs font-sans font-bold text-slate-600 mb-1">
-                  2. Numéro de téléphone Mobile Money
-                </label>
-                <div className="flex items-stretch gap-1">
-                  <div className="bg-slate-100 border border-slate-200 rounded-xl px-3 flex items-center justify-center font-mono text-xs text-slate-600 select-none shrink-0">
-                    {retCountry.flag} {retCountry.code}
-                  </div>
-                  <input
-                    id="ret-phone"
-                    type="tel"
-                    required
-                    placeholder="Ex: 07020304"
-                    value={retPhone.replace(/^\+\d+\s*/, '')}
-                    onChange={(e) => {
-                      const cleanedVal = e.target.value.replace(/[^0-9\s]/g, '');
-                      setRetPhone(`${retCountry.code} ${cleanedVal}`);
-                    }}
-                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:border-amber-500"
-                  />
-                </div>
-              </div>
-
-              {/* Amount of Withdrawal */}
-              <div>
-                <label className="block text-xs font-sans font-bold text-slate-600 mb-1">
-                  3. Montant du Retrait (FCFA)
-                </label>
-                <input
-                  id="ret-amount"
-                  type="number"
-                  required
-                  min={1000}
-                  step={500}
-                  value={retAmount}
-                  onChange={(e) => setRetAmount(Number(e.target.value))}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-sans font-semibold outline-none focus:border-amber-500"
-                />
-                <p className="text-[9px] text-slate-400 mt-1 font-sans">
-                  Minimum {settings.minWithdrawAmount} FCFA. Solde disponible : {(currentUser?.balance || 0).toLocaleString()} FCFA
-                </p>
-              </div>
-
-              {retSuccess && (
-                <p className="text-xs bg-emerald-50 border border-emerald-100 text-emerald-800 p-2.5 rounded-xl text-center font-medium leading-relaxed">
-                  {retSuccess}
-                </p>
-              )}
-              {retError && (
-                <p className="text-xs bg-rose-50 border border-rose-100 text-rose-800 p-2.5 rounded-xl text-center font-medium leading-relaxed">
-                  {retError}
-                </p>
-              )}
-
-              <div className="flex gap-2">
-                <button
-                  id="shortcut-ret-cancel"
-                  type="button"
-                  onClick={() => setShowRetraitModal(false)}
-                  className="flex-1 py-2.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-xs font-sans font-bold"
-                >
-                  Annuler
-                </button>
-                <button
-                  id="shortcut-ret-submit"
-                  type="submit"
-                  className="flex-1 py-2.5 bg-amber-500 hover:bg-amber-600 text-slate-900 rounded-xl text-xs font-display font-extrabold shadow"
-                >
-                  Retirer maintenant
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ROUE DE CHANCE / WHEEL OF FORTUNE SHORTCUT MODAL */}
-      {showWheelModal && (
-        <div id="shortcut-wheel-overlay" className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-slate-200 relative animate-scale-up">
-            <div className="p-4 border-b border-rose-100 flex justify-between items-center bg-rose-500/5">
-              <div className="flex items-center gap-2">
-                <span className="text-lg">🎡</span>
-                <h3 className="font-display font-extrabold text-slate-850 text-sm">
-                  Roue de la Fortune AgriAfri
-                </h3>
-              </div>
-              <button
-                id="close-shortcut-wheel"
-                onClick={() => {
-                  if (!isSpinning) setShowWheelModal(false);
-                }}
-                disabled={isSpinning}
-                className="w-7 h-7 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-full flex items-center justify-center font-bold text-xs disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                ✕
-              </button>
-            </div>
-
-            <div className="p-5 flex flex-col items-center space-y-4">
-              <div className="text-center w-full">
-                {currentUser?.freeSpins && currentUser.freeSpins > 0 ? (
-                  <span className="bg-emerald-500/10 text-emerald-800 text-[10px] font-sans font-extrabold px-3 py-1.5 rounded-full inline-block animate-pulse border border-emerald-500/20 mb-2">
-                    🎉 BONUS : {currentUser.freeSpins} TOUR{currentUser.freeSpins > 1 ? 'S' : ''} GRATUIT{currentUser.freeSpins > 1 ? 'S' : ''} DISPONIBLE{currentUser.freeSpins > 1 ? 'S' : ''} !
-                  </span>
-                ) : null}
-                <p className="text-[11px] font-sans text-slate-500 leading-relaxed">
-                  Tentez votre chance ! Chaque tour de roue coûte <span className="font-bold text-slate-800">500 FCFA</span> ou 1 tour gratuit de parrainage. Les gains sont instantanés.
-                </p>
-              </div>
-
-              {/* WHEEL CONTAINER */}
-              <div className="relative flex flex-col items-center py-4">
-                {/* Absolute Pointer Pin */}
-                <div className="w-6 h-6 bg-emerald-600 rounded-b-full shadow-md z-20 flex items-center justify-center text-white mb-[-12px] relative">
-                  ▼
-                </div>
-                {/* The Rotating Wheel */}
-                <div 
-                  className="w-60 h-60 rounded-full border-4 border-slate-800 shadow-2xl relative overflow-hidden transition-transform duration-[4500ms] ease-out bg-slate-900"
-                  style={{ transform: `rotate(${wheelRotation}deg)` }}
-                >
-                  {sectors.map((sec, idx) => (
-                    <div 
-                      key={idx} 
-                      className="absolute top-0 right-0 w-1/2 h-1/2 origin-bottom-left"
-                      style={{ 
-                        transform: `rotate(${idx * 45}deg) skewY(45deg)`,
-                        backgroundColor: sec.color,
-                        borderRight: '1px solid rgba(255,255,255,0.15)',
-                        borderBottom: '1px solid rgba(255,255,255,0.15)'
-                      }}
-                    >
-                      <div 
-                        className="absolute text-white font-display font-black text-[9px]"
-                        style={{
-                          bottom: '15px',
-                          right: '15px',
-                          transform: 'skewY(-45deg) rotate(22.5deg) translate(20px, 10px)',
-                          width: '60px',
-                          textAlign: 'center'
-                        }}
-                      >
-                        {sec.label}
-                      </div>
-                    </div>
-                  ))}
-                  {/* Center Hub */}
-                  <div className="absolute inset-0 m-auto w-10 h-10 bg-slate-905 border-2 border-slate-800 rounded-full flex items-center justify-center z-10 shadow-lg">
-                    <span className="text-[9px] font-black text-emerald-400">AGRI</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* RESULTS & STATUS */}
-              <div className="w-full text-center space-y-2">
-                <p className="text-[10px] uppercase font-sans text-slate-400 flex items-center justify-center gap-1.5">
-                  <span>Votre solde : <b className="font-mono text-emerald-700">{currentUser?.balance.toLocaleString()} FCFA</b></span>
-                  {currentUser?.freeSpins && currentUser.freeSpins > 0 ? (
-                    <span className="text-[9px] font-extrabold bg-rose-100 text-rose-600 px-1.5 py-0.5 rounded-md animate-pulse">
-                      🎫 {currentUser.freeSpins} Spin{currentUser.freeSpins > 1 ? 's' : ''} Gratuit{currentUser.freeSpins > 1 ? 's' : ''}
-                    </span>
-                  ) : null}
-                </p>
-
-                {wheelResultMsg && (
-                  <p id="wheel-result-msg" className="text-xs bg-amber-50 border border-amber-200 text-amber-900 p-2.5 rounded-xl leading-relaxed font-bold animate-pulse">
-                    {wheelResultMsg}
-                  </p>
-                )}
-
-                <button
-                  id="btn-spin-wheel"
-                  onClick={spinWheel}
-                  disabled={isSpinning}
-                  className="w-full py-3 bg-rose-650 hover:bg-rose-700 text-white rounded-2xl text-xs font-display font-black shadow-md tracking-wider uppercase transition-colors disabled:opacity-50 disabled:cursor-not-allowed uppercase shrink-0 cursor-pointer"
-                >
-                  {isSpinning 
-                    ? '🎡 Rotation en cours...' 
-                    : currentUser?.freeSpins && currentUser.freeSpins > 0 
-                    ? '🍀 Lancer (TOUR GRATUIT 🎉)' 
-                    : '🍀 Lancer (500 FCFA)'}
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
 
       {/* TICKET SUBMISSION MODAL */}
       {showSubmitTicket && (
@@ -1015,6 +660,467 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveTab }) => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* 🔮 TEAM DETAILS POPUP MODAL (MON ÉQUIPE DE COOPÉRATIVE) */}
+      {showTeamDetails && (
+        <div id="team-details-overlay" className="fixed inset-0 bg-black/60 backdrop-blur-xs flex items-center justify-center z-50 p-4">
+          <div className="bg-[#f8fafc] rounded-3xl w-full max-w-sm overflow-hidden shadow-2xl border border-indigo-200/20 animate-scale-up max-h-[85vh] flex flex-col">
+            
+            {/* Header section matching branding */}
+            <div className="p-4 border-b border-slate-100 flex justify-between items-center bg-[#ea5454] text-white">
+              <div className="flex items-center gap-2">
+                <span className="text-lg">👥</span>
+                <h3 className="font-sans font-black text-xs uppercase tracking-wider">
+                  Mon Équipe
+                </h3>
+              </div>
+              <button
+                id="close-team-details"
+                onClick={() => setShowTeamDetails(false)}
+                className="w-7 h-7 bg-white/10 hover:bg-white/20 text-white rounded-full flex items-center justify-center font-bold text-xs select-none transition-all cursor-pointer"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="p-4 overflow-y-auto space-y-4.5 flex-1">
+              
+              {/* Informative advice banner */}
+              <div className="bg-indigo-50 border border-indigo-100/50 p-3 rounded-2xl text-[10px] text-indigo-950 font-sans font-semibold leading-relaxed relative overflow-hidden">
+                <div className="absolute -right-3 -bottom-3 text-lg opacity-15">💰</div>
+                📌 Chaque nouvel investissement de vos parrainés génère instantanément des bonus crédités sur votre Solde de retrait !
+              </div>
+
+              {/* 🏅 NIVEAU D'ÉQUIPE - CONSOLIDATED STATS TABLE */}
+              <div className="space-y-2.5">
+                <h4 className="font-sans font-black text-[10px] text-slate-400 uppercase tracking-widest leading-none pl-1">
+                  📊 TABLEAU DES COMMISSIONS
+                </h4>
+
+                <div className="space-y-2">
+                  {/* Level 1 Item Row */}
+                  <div className="bg-amber-500/5 border border-amber-200/40 rounded-2xl p-3 flex items-center justify-between gap-2 transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-yellow-300 to-amber-500 text-white flex items-center justify-center font-black text-xs shadow-2xs select-none">
+                        🥇
+                      </div>
+                      <div>
+                        <span className="font-mono text-xs font-black text-slate-800 leading-none">30%</span>
+                        <span className="text-[9px] text-slate-400 font-bold block uppercase mt-0.5">Remise Niv 1</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono text-xs font-extrabold text-slate-700 block">{level1Users.length}</span>
+                      <span className="text-[8.5px] text-slate-400/80 font-bold block uppercase leading-none">Total invité</span>
+                    </div>
+                    <div className="text-right pr-1">
+                      <span className="font-mono text-xs font-extrabold text-amber-600 block">{level1Active.length}</span>
+                      <span className="text-[8.5px] text-slate-400/80 font-bold block uppercase leading-none">Activé</span>
+                    </div>
+                  </div>
+
+                  {/* Level 2 Item Row */}
+                  <div className="bg-indigo-500/5 border border-indigo-200/40 rounded-2xl p-3 flex items-center justify-between gap-2 transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-slate-200 text-indigo-950 flex items-center justify-center font-black text-xs shadow-2xs select-none">
+                        🥈
+                      </div>
+                      <div>
+                        <span className="font-mono text-xs font-black text-slate-800 leading-none">5%</span>
+                        <span className="text-[9px] text-slate-400 font-bold block uppercase mt-0.5">Lv 2 Rebate</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono text-xs font-extrabold text-slate-700 block">{level2Users.length}</span>
+                      <span className="text-[8.5px] text-slate-400/80 font-bold block uppercase leading-none">Total invité</span>
+                    </div>
+                    <div className="text-right pr-1">
+                      <span className="font-mono text-xs font-extrabold text-[#111827] block text-[#1b63eb]">{level2Active.length}</span>
+                      <span className="text-[8.5px] text-slate-400/80 font-bold block uppercase leading-none">Activé</span>
+                    </div>
+                  </div>
+
+                  {/* Level 3 Item Row */}
+                  <div className="bg-rose-500/5 border border-rose-200/40 rounded-2xl p-3 flex items-center justify-between gap-2 transition-colors">
+                    <div className="flex items-center gap-2.5">
+                      <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-600 to-rose-450 text-white flex items-center justify-center font-black text-xs shadow-2xs select-none">
+                        🥉
+                      </div>
+                      <div>
+                        <span className="font-mono text-xs font-black text-slate-800 leading-none">1%</span>
+                        <span className="text-[9px] text-slate-400 font-bold block uppercase mt-0.5">Lv 3 Rebate</span>
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <span className="font-mono text-xs font-extrabold text-slate-700 block">{level3Users.length}</span>
+                      <span className="text-[8.5px] text-slate-400/80 font-bold block uppercase leading-none">Total invité</span>
+                    </div>
+                    <div className="text-right pr-1">
+                      <span className="font-mono text-xs font-extrabold text-rose-500 block">{level3Active.length}</span>
+                      <span className="text-[8.5px] text-slate-400/80 font-bold block uppercase leading-none">Activé</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* DETAILS AND MEMBERS LISTINGS */}
+              <div className="space-y-3.5 pt-2 border-t border-slate-100">
+                <h4 className="font-sans font-black text-[10px] text-slate-400 uppercase tracking-widest pl-1 mb-1">
+                  👥 MEMBRES PAR SECTEUR
+                </h4>
+
+                {/* LEVEL 1 LIST */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center bg-amber-500/10 p-2 rounded-xl border border-amber-300/20">
+                    <span className="text-[9.5px] font-black text-amber-900 uppercase">🥇 Niveau 1 (Remise 30%)</span>
+                    <span className="text-[9px] font-bold text-amber-800 bg-white px-2 py-0.5 rounded-full">{level1Users.length} invité(s)</span>
+                  </div>
+                  {level1Users.length === 0 ? (
+                    <p className="text-[10px] text-slate-400 italic py-1 pl-2 font-medium">Aucun parrainé direct.</p>
+                  ) : (
+                    <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
+                      {level1Users.map((u) => {
+                        const isActive = investments.some(inv => inv.userId === u.id && inv.status === 'ACTIVE');
+                        return (
+                          <div key={u.id} className="bg-white border border-slate-150 p-2 rounded-xl flex justify-between items-center text-[10px]">
+                            <div>
+                              <p className="font-sans font-extrabold text-[#2a3042]">{u.fullName}</p>
+                              <p className="text-[9px] text-slate-400 font-mono mt-0.5">{u.phone.replace(/(\d{2})\d+(\d{3})/, '$1••••$2')}</p>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-[8.5px] font-extrabold ${isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-500'}`}>
+                              {isActive ? '🌾 Actif' : '😴 Inactif'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* LEVEL 2 LIST */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center bg-indigo-500/10 p-2 rounded-xl border border-indigo-300/20">
+                    <span className="text-[9.5px] font-black text-indigo-900 uppercase">🥈 Niveau 2 (Rebate 5%)</span>
+                    <span className="text-[9px] font-bold text-indigo-800 bg-white px-2 py-0.5 rounded-full">{level2Users.length} invité(s)</span>
+                  </div>
+                  {level2Users.length === 0 ? (
+                    <p className="text-[10px] text-slate-400 italic py-1 pl-2 font-medium">Aucun parrainé secondaire.</p>
+                  ) : (
+                    <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
+                      {level2Users.map((u) => {
+                        const isActive = investments.some(inv => inv.userId === u.id && inv.status === 'ACTIVE');
+                        return (
+                          <div key={u.id} className="bg-white border border-slate-150 p-2 rounded-xl flex justify-between items-center text-[10px]">
+                            <div>
+                              <p className="font-sans font-extrabold text-[#2a3042]">{u.fullName}</p>
+                              <p className="text-[9px] text-slate-400 font-mono mt-0.5">{u.phone.replace(/(\d{2})\d+(\d{3})/, '$1••••$2')}</p>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-[8.5px] font-extrabold ${isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-500'}`}>
+                              {isActive ? '🌾 Actif' : '😴 Inactif'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+
+                {/* LEVEL 3 LIST */}
+                <div className="space-y-1.5">
+                  <div className="flex justify-between items-center bg-rose-500/10 p-2 rounded-xl border border-rose-300/20">
+                    <span className="text-[9.5px] font-black text-rose-900 uppercase">🥉 Niveau 3 (Rebate 1%)</span>
+                    <span className="text-[9px] font-bold text-rose-800 bg-white px-2 py-0.5 rounded-full">{level3Users.length} invité(s)</span>
+                  </div>
+                  {level3Users.length === 0 ? (
+                    <p className="text-[10px] text-slate-400 italic py-1 pl-2 font-medium">Aucun parrainé niv 3.</p>
+                  ) : (
+                    <div className="space-y-1 max-h-24 overflow-y-auto pr-1">
+                      {level3Users.map((u) => {
+                        const isActive = investments.some(inv => inv.userId === u.id && inv.status === 'ACTIVE');
+                        return (
+                          <div key={u.id} className="bg-white border border-slate-150 p-2 rounded-xl flex justify-between items-center text-[10px]">
+                            <div>
+                              <p className="font-sans font-extrabold text-[#2a3042]">{u.fullName}</p>
+                              <p className="text-[9px] text-slate-400 font-mono mt-0.5">{u.phone.replace(/(\d{2})\d+(\d{3})/, '$1••••$2')}</p>
+                            </div>
+                            <span className={`px-2 py-0.5 rounded-full text-[8.5px] font-extrabold ${isActive ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-500'}`}>
+                              {isActive ? '🌾 Actif' : '😴 Inactif'}
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+
+            <div className="p-3 border-t border-slate-100 bg-slate-50 flex items-center gap-3">
+              <a
+                href={settings.telegramLink}
+                target="_blank"
+                rel="noreferrer"
+                className="p-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl flex items-center justify-center font-bold text-xs shadow-2xs select-none transition-all cursor-pointer"
+                title="Support en ligne"
+              >
+                🎧 Support
+              </a>
+              <button
+                type="button"
+                onClick={() => setShowTeamDetails(false)}
+                className="flex-1 py-2.5 bg-[#ea5454] hover:bg-[#d84343] text-white font-sans font-black text-xs text-center rounded-xl transition-colors cursor-pointer uppercase tracking-wider"
+              >
+                Fermer l'aperçu
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔮 STUNNING SYSTEM TASK REWARDS POPUP MODAL */}
+      {showTasksModal && currentUser && (
+        <div id="tasks-system-overlay" className="fixed inset-0 bg-black/75 backdrop-blur-xs flex items-center justify-center z-50 p-3 overflow-y-auto">
+          <div className="bg-[#f2f4f8] rounded-[32px] w-full max-w-sm overflow-hidden shadow-2xl border border-slate-200 animate-scale-up max-h-[92vh] flex flex-col relative text-slate-800">
+            
+            {/* Clean Modal Header */}
+            <div className="bg-white border-b border-slate-200 px-5 py-4 flex justify-between items-center shrink-0">
+              <h3 className="font-sans font-black text-sm text-[#0c62e5] uppercase tracking-tight flex items-center gap-2">
+                🏆 Récompense des tâches
+              </h3>
+              <button 
+                onClick={() => setShowTasksModal(false)}
+                className="w-8 h-8 rounded-full bg-slate-100 text-slate-500 hover:bg-slate-200 hover:text-slate-800 flex items-center justify-center text-xs font-bold cursor-pointer transition-colors"
+                title="Fermer"
+              >
+                ✕
+              </button>
+            </div>
+
+            {/* Scrollable Scroll Area */}
+            <div className="flex-1 overflow-y-auto pb-6">
+
+              {/* White Form Card Body Wrapper starting directly with Centre de missions */}
+              <div className="p-4 space-y-4">
+
+                {/* Title Section: Centre de missions */}
+                <div className="space-y-0.5 pl-1.5">
+                  <h3 className="font-sans font-black text-[#1f2937] text-xs uppercase tracking-wider">
+                    Centre de missions
+                  </h3>
+                  <p className="text-[10px] text-slate-505 font-sans font-medium">
+                    Après avoir complété chaque mission, vous recevrez une récompense
+                  </p>
+                </div>
+
+                {/* 📋 LIST OF TASK ITEMS */}
+                <div className="space-y-3">
+
+                  {/* Task Item 1: 10 people */}
+                  <div className="bg-white border border-slate-150 rounded-2xl p-4 space-y-3.5 shadow-sm">
+                    <div className="flex gap-3 items-start">
+                      {/* Exclamation blue circular badge */}
+                      <div className="w-8 h-8 rounded-full bg-[#0c62e5] text-white flex items-center justify-center font-sans font-black text-sm select-none shrink-0 filter drop-shadow-2xs">
+                        !
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-sans font-black text-slate-800 text-[11.5px] leading-snug">
+                          Inviter à activer 10 personnes
+                        </h4>
+                        
+                        {/* Target Grid Metrics Row */}
+                        <div className="grid grid-cols-3 gap-1 pt-3 text-left">
+                          <div>
+                            <span className="font-sans text-[9px] text-slate-400 block uppercase font-bold">Récompense</span>
+                            <span className="font-mono text-[11px] font-black text-slate-800 block mt-0.5">FCFA 500.00</span>
+                          </div>
+                          <div>
+                            <span className="font-sans text-[9px] text-slate-400 block uppercase font-bold">Exigé</span>
+                            <span className="font-mono text-[11.5px] font-extrabold text-slate-800 block mt-0.5">10</span>
+                          </div>
+                          <div>
+                            <span className="font-sans text-[9px] text-slate-400 block uppercase font-bold">Complété</span>
+                            <span className="font-mono text-[11.5px] font-extrabold text-slate-800 block mt-0.5">
+                              {level1Active.length}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Claim dynamic button */}
+                      <div className="shrink-0 pt-1">
+                        {claimedTasks.includes('task_10') ? (
+                          <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 text-[10px] font-sans font-black rounded-lg border border-emerald-100 uppercase block tracking-wider">
+                            Réclamé
+                          </span>
+                        ) : (
+                          <button
+                            disabled={level1Active.length < 10}
+                            onClick={() => handleClaimTask('task_10', 500)}
+                            className={`px-3.5 py-1.5 rounded-lg text-[10px] font-sans font-black uppercase tracking-wider transition-all select-none ${
+                              level1Active.length >= 10
+                                ? 'bg-[#0c62e5] hover:bg-blue-700 text-white cursor-pointer shadow-sm'
+                                : 'bg-[#cbcdd6] text-white cursor-not-allowed'
+                            }`}
+                          >
+                            Réclamer
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Task Item 2: 20 people */}
+                  <div className="bg-white border border-slate-150 rounded-2xl p-4 space-y-3.5 shadow-sm">
+                    <div className="flex gap-3 items-start">
+                      {/* Exclamation blue circular badge */}
+                      <div className="w-8 h-8 rounded-full bg-[#0c62e5] text-white flex items-center justify-center font-sans font-black text-sm select-none shrink-0 filter drop-shadow-2xs">
+                        !
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-sans font-black text-slate-800 text-[11.5px] leading-snug">
+                          Inviter à activer 20 personnes
+                        </h4>
+                        
+                        {/* Target Grid Metrics Row */}
+                        <div className="grid grid-cols-3 gap-1 pt-3 text-left">
+                          <div>
+                            <span className="font-sans text-[9px] text-slate-400 block uppercase font-bold">Récompense</span>
+                            <span className="font-mono text-[11px] font-black text-slate-800 block mt-0.5">FCFA 1000.00</span>
+                          </div>
+                          <div>
+                            <span className="font-sans text-[9px] text-slate-400 block uppercase font-bold">Exigé</span>
+                            <span className="font-mono text-[11.5px] font-extrabold text-slate-800 block mt-0.5">20</span>
+                          </div>
+                          <div>
+                            <span className="font-sans text-[9px] text-slate-400 block uppercase font-bold">Complété</span>
+                            <span className="font-mono text-[11.5px] font-extrabold text-slate-800 block mt-0.5">
+                              {level1Active.length}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Claim dynamic button */}
+                      <div className="shrink-0 pt-1">
+                        {claimedTasks.includes('task_20') ? (
+                          <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 text-[10px] font-sans font-black rounded-lg border border-emerald-100 uppercase block tracking-wider">
+                            Réclamé
+                          </span>
+                        ) : (
+                          <button
+                            disabled={level1Active.length < 20}
+                            onClick={() => handleClaimTask('task_20', 1000)}
+                            className={`px-3.5 py-1.5 rounded-lg text-[10px] font-sans font-black uppercase tracking-wider transition-all select-none ${
+                              level1Active.length >= 20
+                                ? 'bg-[#0c62e5] hover:bg-blue-700 text-white cursor-pointer shadow-sm'
+                                : 'bg-[#cbcdd6] text-white cursor-not-allowed'
+                            }`}
+                          >
+                            Réclamer
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Task Item 3: 50 people with visual progress bar at bottom */}
+                  <div className="bg-white border border-slate-150 rounded-2xl p-4 space-y-3.5 shadow-sm relative">
+                    <div className="flex gap-3 items-start pb-1">
+                      {/* Green circle clock outline icon */}
+                      <div className="w-8 h-8 rounded-full border-2 border-emerald-500 text-emerald-600 flex items-center justify-center font-sans font-black text-xs select-none shrink-0">
+                        🕒
+                      </div>
+                      <div className="flex-1 min-w-0">
+                        <h4 className="font-sans font-black text-slate-800 text-[11.5px] leading-snug">
+                          Inviter à activer 50 personnes
+                        </h4>
+                        
+                        {/* Target Grid Metrics Row */}
+                        <div className="grid grid-cols-3 gap-1 pt-3 text-left">
+                          <div>
+                            <span className="font-sans text-[9px] text-slate-400 block uppercase font-bold">Récompense</span>
+                            <span className="font-mono text-[11px] font-black text-slate-800 block mt-0.5">FCFA 3000.00</span>
+                          </div>
+                          <div>
+                            <span className="font-sans text-[9px] text-slate-400 block uppercase font-bold">Exigé</span>
+                            <span className="font-mono text-[11.5px] font-extrabold text-slate-800 block mt-0.5">50</span>
+                          </div>
+                          <div>
+                            <span className="font-sans text-[9px] text-slate-400 block uppercase font-bold">Complété</span>
+                            <span className="font-mono text-[11.5px] font-extrabold text-slate-800 block mt-0.5">
+                              {level1Active.length}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Claim dynamic button */}
+                      <div className="shrink-0 pt-1">
+                        {claimedTasks.includes('task_50') ? (
+                          <span className="px-3 py-1.5 bg-emerald-50 text-emerald-700 text-[10px] font-sans font-black rounded-lg border border-emerald-100 uppercase block tracking-wider">
+                            Réclamé
+                          </span>
+                        ) : (
+                          <button
+                            disabled={level1Active.length < 50}
+                            onClick={() => handleClaimTask('task_50', 3000)}
+                            className={`px-3.5 py-1.5 rounded-lg text-[10px] font-sans font-black uppercase tracking-wider transition-all select-none ${
+                              level1Active.length >= 50
+                                ? 'bg-[#0c62e5] hover:bg-blue-700 text-white cursor-pointer shadow-sm'
+                                : 'bg-[#cbcdd6] text-white cursor-not-allowed'
+                            }`}
+                          >
+                            Réclamer
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Progress Bar with "21/50" Beneath as in mock screen */}
+                    <div className="space-y-1.5 pt-2 border-t border-slate-100">
+                      <div className="w-full bg-slate-100 h-2 rounded-full overflow-hidden border border-slate-200/50">
+                        <div 
+                          className="bg-[#0c62e5] h-full rounded-full transition-all duration-350"
+                          style={{ width: `${Math.min(100, Math.round((level1Active.length / 50) * 100))}%` }}
+                        />
+                      </div>
+                      <div className="text-[9.5px] font-mono font-black text-[#0c62e5] text-left">
+                        {level1Active.length} / 50
+                      </div>
+                    </div>
+
+                    {/* Blue Headsets Support Bubble on right bottom of the card corner */}
+                    <a
+                      href={settings.telegramLink}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="absolute right-3.5 -bottom-2 w-10 h-10 rounded-full bg-[#0c62e5] text-white flex items-center justify-center shadow-md border-2 border-white cursor-pointer shrink-0"
+                      title="Support client"
+                    >
+                      🎧
+                    </a>
+                  </div>
+
+                </div>
+
+              </div>
+
+            </div>
+
+            {/* Close footer panel */}
+            <div className="p-3.5 border-t border-slate-200 bg-white flex justify-end shrink-0">
+              <button
+                type="button"
+                onClick={() => setShowTasksModal(false)}
+                className="w-full py-3 bg-[#ea5454] hover:bg-[#d84343] text-white font-sans font-black text-xs text-center rounded-2xl cursor-pointer uppercase tracking-wider"
+              >
+                Fermer l'espace récompenses
+              </button>
+            </div>
+
           </div>
         </div>
       )}

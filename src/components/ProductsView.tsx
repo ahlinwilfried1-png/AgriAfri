@@ -26,6 +26,7 @@ import {
   Database,
   Sun,
   ShieldCheck,
+  ArrowLeft,
 } from 'lucide-react';
 
 // Help helper to match dynamic icons
@@ -99,7 +100,11 @@ export const getProductRealImage = (name: string, defaultImage?: string): string
   return defaultImage || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&q=80&w=600';
 };
 
-export const ProductsView: React.FC = () => {
+interface ProductsViewProps {
+  setActiveTab?: (tab: string) => void;
+}
+
+export const ProductsView: React.FC<ProductsViewProps> = ({ setActiveTab }) => {
   const { products, currentUser, investInProduct, investments, settings } = useApp();
   const [activeCategory, setActiveCategory] = useState<ProductCategory>('STABILITÉ');
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
@@ -226,171 +231,175 @@ export const ProductsView: React.FC = () => {
   };
 
   return (
-    <div id="products-view-container" className="animate-fade-in space-y-5 pb-24">
-      
-      {/* 🏷️ HORIZONTAL PREMIUM ONGLETS / SELECTION MENUS */}
-      <div className="bg-[#eceff3] p-1.5 rounded-2xl flex gap-1.5 shadow-2xs">
-        {(['STABILITÉ', 'BIEN-ÊTRE', 'ACTIVITÉS'] as ProductCategory[]).map((cat) => {
-          const isActive = activeCategory === cat;
-          return (
-            <button
-              id={`filter-cat-${cat}`}
-              key={cat}
-              onClick={() => setActiveCategory(cat)}
-              className={`flex-1 py-2.5 text-center text-[11px] font-sans font-black tracking-wider uppercase rounded-xl transition-all cursor-pointer ${
-                isActive
-                  ? 'bg-[#0f62fe] text-white shadow-sm'
-                  : 'text-[#4e5d78] hover:text-slate-800'
-              }`}
-            >
-              {cat === 'STABILITÉ' ? 'Stabilité' : cat === 'BIEN-ÊTRE' ? 'Bien-être' : 'Activités'}
-            </button>
-          );
-        })}
+    <div id="products-view-container" className="animate-fade-in flex flex-col pb-24 h-full">
+      {/* 🔵 BLUE PRODUCT VIEW HEADER (IMAGE 2 DESIGN) */}
+      <div className="bg-[#1b63eb] text-white -mx-4 -mt-4 px-4 py-3.5 mb-4 flex items-center justify-between shadow-md">
+        <button
+          onClick={() => {
+            if (setActiveTab) {
+              setActiveTab('accueil');
+            } else {
+              window.history.back();
+            }
+          }}
+          className="p-1 text-white hover:text-slate-200 transition-colors cursor-pointer"
+        >
+          <ArrowLeft className="w-5 h-5 stroke-[2.5]" />
+        </button>
+        <span className="font-sans font-black text-sm tracking-wide">
+          Liste d'investissement
+        </span>
+        <div className="w-5 h-5" /> {/* Empty buffer to balance */}
       </div>
 
-      {/* 📚 EXPOSÉ UNIQUE DE LA CATÉGORIE EN SENS VERTICAL */}
-      <div className="space-y-4">
-        {(() => {
-          const catId = activeCategory;
-          const catDetails = getCategoryDetails(catId);
-          const catProducts = products.filter((p) => p.category === catId && p.active);
+      <div className="flex gap-3 items-start h-full">
+        {/* 📋 LEFT SIDEBAR NAVIGATION CATEGORIES (STABLE, BIEN-ÊTRE, ACTIVITÉ) */}
+        <div className="w-[85px] shrink-0 flex flex-col gap-2.5 bg-white/70 backdrop-blur-md p-1.5 py-3 rounded-2xl border border-white/40 shadow-2xs">
+          {(['STABILITÉ', 'BIEN-ÊTRE', 'ACTIVITÉS'] as ProductCategory[]).map((cat) => {
+            const isActive = activeCategory === cat;
+            let iconLabel = "Stable";
+            let IconEmoji = "⚡";
+            if (cat === 'BIEN-ÊTRE') {
+              iconLabel = "Bien-être";
+              IconEmoji = "🎁";
+            } else if (cat === 'ACTIVITÉS') {
+              iconLabel = "Activité";
+              IconEmoji = "🔥";
+            }
 
-          return (
-            <div id={`section-cat-${catId}`} className="space-y-4 animate-fade-in">
-              
-              {/* Category Info Banner */}
-              <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4 space-y-1">
-                <h3 className="font-sans font-black text-[#2a324b] text-xs uppercase tracking-wide">
-                  {catDetails.title}
-                </h3>
-                <p className="font-sans text-[10px] text-slate-400 font-semibold leading-relaxed">
-                  {catDetails.desc}
-                </p>
-                <div className="text-[9px] text-[#0f62fe] font-sans font-bold uppercase tracking-wider pt-1">
-                  💡 {catDetails.badge}
-                </div>
-              </div>
+            return (
+              <button
+                id={`filter-cat-${cat}`}
+                key={cat}
+                onClick={() => setActiveCategory(cat)}
+                className={`flex flex-col items-center justify-center p-2 rounded-xl transition-all duration-200 cursor-pointer ${
+                  isActive
+                    ? 'bg-[#1b63eb] text-white shadow-sm scale-102'
+                    : 'bg-transparent text-slate-500 hover:bg-slate-50'
+                }`}
+              >
+                <span className="text-lg leading-none mb-1">{IconEmoji}</span>
+                <span className="text-[10px] font-sans font-black tracking-tight text-center truncate w-full">
+                  {iconLabel}
+                </span>
+              </button>
+            );
+          })}
+        </div>
 
-              {/* Products List inside Category (horizontal cards with images left, stats right) */}
-              <div className="space-y-4">
-                {catProducts.length === 0 ? (
-                  <div className="text-center py-10 bg-white rounded-3xl border border-slate-100 text-slate-400">
-                    <p className="text-xs font-sans">Aucun produit actif disponible actuellement.</p>
-                  </div>
-                ) : (
-                  catProducts.map((prod) => {
-                    const isPurchased = investments.some((i) => i.productId === prod.id && i.userId === currentUser?.id && i.status === 'ACTIVE');
-                    const realImg = getProductRealImage(prod.name, prod.image);
-                    const dailyRev = Math.round(prod.totalRevenue / prod.durationDays);
-
-                    return (
-                      <div
-                        id={`product-card-${prod.id}`}
-                        key={prod.id}
-                        className="bg-white border border-slate-200/70 rounded-3xl overflow-hidden shadow-xs hover:border-[#0f62fe] transition-all duration-200"
-                      >
-                        {/* Title bar of product card */}
-                        <div className="bg-slate-50/80 px-4.5 py-3 border-b border-slate-100 flex justify-between items-center">
-                          <h4 className="font-sans font-black text-slate-800 text-xs sm:text-sm uppercase tracking-wide">
-                            {prod.name}
-                          </h4>
-                          <span className="text-[9px] font-sans font-bold bg-[#ccd5fe] text-[#3b52d9] px-2.2 py-0.5 rounded-full select-none">
-                            {prod.category}
-                          </span>
-                        </div>
-
-                        {/* Card body content with direct stats layout */}
-                        <div className="p-4 flex gap-4 items-start">
-                          {/* Left product image with aspect-square preview */}
-                          <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden bg-slate-100 shrink-0 border border-slate-200/40 relative">
-                            {realImg ? (
-                              <img 
-                                src={realImg} 
-                                alt={prod.name} 
-                                className="w-full h-full object-cover"
-                                referrerPolicy="no-referrer"
-                              />
-                            ) : (
-                              <div className={`w-full h-full bg-gradient-to-br ${getCoverGradient(prod.id, prod.category)}`} />
-                            )}
-                          </div>
-
-                          {/* Right product financials table list */}
-                          <div className="flex-1 space-y-1 text-slate-700">
-                            <div className="flex justify-between items-center pb-1 border-b border-dashed border-slate-100">
-                              <span className="text-[10px] font-sans font-bold text-slate-400">Prix du produit :</span>
-                              <span className="text-xs font-black font-mono text-slate-800">{prod.price.toLocaleString()} FCFA</span>
-                            </div>
-                            <div className="flex justify-between items-center pb-1 border-b border-dashed border-slate-100">
-                              <span className="text-[10px] font-sans font-bold text-slate-400">Revenu quotidien :</span>
-                              <span className="text-xs font-black font-mono text-emerald-600">+{dailyRev.toLocaleString()} FCFA/Jour</span>
-                            </div>
-                            <div className="flex justify-between items-center pb-1 border-b border-dashed border-slate-100">
-                              <span className="text-[10px] font-sans font-bold text-slate-400">Revenu total :</span>
-                              <span className="text-xs font-black font-mono text-emerald-600">+{prod.totalRevenue.toLocaleString()} FCFA</span>
-                            </div>
-                            <div className="flex justify-between items-center">
-                              <span className="text-[10px] font-sans font-bold text-slate-400">Cycle de retour :</span>
-                              <span className="text-xs font-black font-sans text-slate-850">{prod.durationDays} Jours</span>
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Bottom action bar inside product card */}
-                        <div className="px-4 pb-4.5 space-y-2">
-                          {/* Achat alert feedback bar */}
-                          {isPurchased && (
-                            <div className="text-[9px] py-1 px-3 rounded-lg font-sans font-bold bg-emerald-50 border border-emerald-100 text-emerald-850 text-center uppercase tracking-wide leading-none">
-                              ✓ Achat réussi ! Producteur actif
-                            </div>
-                          )}
-
-                          {/* Unlock rules blocker */}
-                          {isRuleActive && prod.category !== 'STABILITÉ' && !hasActiveStability && (
-                            <div className="text-[9px] py-1 px-3 rounded-lg font-sans font-extrabold bg-rose-50 border border-rose-100 text-rose-800 text-center uppercase tracking-wider animate-pulse leading-none">
-                              ⚠️ Stabilité requise pour débloquer
-                            </div>
-                          )}
-
-                          <div className="flex justify-between items-center gap-2">
-                            {/* Open and closed hour label */}
-                            {prod.category !== 'STABILITÉ' && (() => {
-                              const liveTimeStr = settings?.simulatedTime && settings.simulatedTime.trim() !== ''
-                                ? settings.simulatedTime.trim()
-                                : new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-                              const status = checkProductOpen(prod, liveTimeStr);
-                              return (
-                                <span className="text-[9px] font-bold font-sans text-slate-400 flex items-center gap-1">
-                                  <span className={`w-1.5 h-1.5 rounded-full ${status.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-rose-450'}`} />
-                                  {status.isOpen ? 'Disponible' : 'Indisponible'}
-                                </span>
-                              );
-                            })()}
-
-                            <button
-                              id={`btn-invest-prod-${prod.id}`}
-                              onClick={() => handleInvestClick(prod)}
-                              disabled={isRuleActive && prod.category !== 'STABILITÉ' && !hasActiveStability}
-                              className={`ml-auto px-6 py-2 rounded-3xl text-xs font-sans font-black uppercase tracking-wider select-none shrink-0 transition-colors shadow-xs ${
-                                isRuleActive && prod.category !== 'STABILITÉ' && !hasActiveStability
-                                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
-                                  : 'bg-[#9c2b2b] hover:bg-[#b03030] text-white cursor-pointer'
-                              }`}
-                            >
-                              Acheter
-                            </button>
-                          </div>
-                        </div>
-
-                      </div>
-                    );
-                  })
-                )}
-              </div>
+        {/* 📚 RIGHT CONTENT LIST OF DETAILED PRODUCT CARDS */}
+        <div className="flex-1 space-y-4 max-h-[700px] overflow-y-auto pr-0.5 scrollbar-none">
+          {filteredProducts.length === 0 ? (
+            <div className="text-center py-10 bg-white rounded-3xl border border-slate-150 text-slate-400">
+              <p className="text-xs font-sans">Aucun produit actif disponible.</p>
             </div>
-          );
-        })()}
+          ) : (
+            filteredProducts.map((prod) => {
+              const isPurchased = investments.some((i) => i.productId === prod.id && i.userId === currentUser?.id && i.status === 'ACTIVE');
+              const dailyRev = Math.round(prod.totalRevenue / prod.durationDays);
+              const productImage = getProductRealImage(prod.name, prod.image);
+
+              return (
+                <div
+                  id={`product-card-${prod.id}`}
+                  key={prod.id}
+                  className="bg-white border border-slate-200 rounded-3xl overflow-hidden shadow-2xs hover:border-[#1b63eb] transition-all duration-150 flex flex-col"
+                >
+                  {/* Agricultural Category/Harvest Cover Image at top of card */}
+                  <div className="w-full h-32 relative bg-slate-155 overflow-hidden">
+                    <img 
+                      src={productImage} 
+                      alt={prod.name} 
+                      className="w-full h-full object-cover animate-fade-in"
+                      referrerPolicy="no-referrer"
+                    />
+                    {/* Floating dark agricultural text overlay */}
+                    <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/20 to-transparent flex items-end p-3">
+                      <div className="w-full flex justify-between items-center">
+                        <span className="text-[10px] font-sans font-black text-emerald-300 uppercase tracking-widest bg-black/45 px-2 py-0.5 rounded-md">
+                          💎 {prod.category}
+                        </span>
+                        <span className="text-[9px] font-sans font-bold text-white bg-emerald-600/90 px-2 py-0.5 rounded-md uppercase tracking-wider">
+                          AGRO RÉCOLTE
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Title and stats layout */}
+                  <div className="p-3.5 space-y-2.5">
+                    <div className="flex items-center gap-1.5">
+                      <h4 className="font-sans font-black text-[#2a3042] text-xs uppercase tracking-wide">
+                        {prod.name}
+                      </h4>
+                      <span className="inline-block w-1.5 h-1.5 bg-emerald-500 rounded-full animate-ping-once" />
+                    </div>
+
+                    {/* Table-like statistics checklist */}
+                    <div className="space-y-1.5 border-t border-b border-dashed border-slate-100 py-2.5 text-xs text-slate-600">
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-sans font-bold text-slate-400">Prix unitaire</span>
+                        <span className="text-xs font-mono font-black text-rose-600">
+                          FCFA {prod.price.toLocaleString('fr-FR')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-sans font-bold text-slate-400">Durée</span>
+                        <span className="text-xs font-sans font-bold text-slate-800">
+                          {prod.durationDays} Jours
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-sans font-bold text-slate-400">Revenus quotidiens</span>
+                        <span className="text-xs font-sans font-bold text-slate-800">
+                          FCFA {dailyRev.toLocaleString('fr-FR')}
+                        </span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span className="text-[10px] font-sans font-bold text-slate-400">Revenu total</span>
+                        <span className="text-xs font-sans font-bold text-slate-800">
+                          FCFA {prod.totalRevenue.toLocaleString('fr-FR')}
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Crowdfunding micro progress and slots indicator */}
+                    <div className="space-y-1 text-left font-sans">
+                      <div className="flex justify-between text-[9px] font-bold text-slate-400 uppercase tracking-tight">
+                        <span>Financement du Projet</span>
+                        <span className="text-emerald-600 font-extrabold">{45 + (prod.name.charCodeAt(0) % 50)}% Collecté</span>
+                      </div>
+                      <div className="w-full bg-slate-100 h-1.5 rounded-full overflow-hidden">
+                        <div 
+                          className="bg-emerald-500 h-full rounded-full" 
+                          style={{ width: `${45 + (prod.name.charCodeAt(0) % 50)}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between items-center text-[9px] mt-0.5">
+                        <span className="text-amber-600 font-extrabold bg-amber-50 px-1.5 py-0.5 rounded-sm uppercase">
+                          ⚡ {3 + (prod.name.charCodeAt(1) % 15)} Parts Restantes
+                        </span>
+                        <span className="text-slate-400 font-semibold flex items-center gap-0.5">
+                          🛡️ Garantie Récolte
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* Bottom layout pill button */}
+                    <button
+                      id={`btn-invest-prod-${prod.id}`}
+                      onClick={() => handleInvestClick(prod)}
+                      className="w-full py-2.5 bg-[#1b63eb] hover:bg-blue-700 active:scale-98 transition-all text-white font-sans font-black text-xs uppercase tracking-wider rounded-3xl flex items-center justify-center gap-2 select-none shadow-xs cursor-pointer mt-1"
+                    >
+                      Investir maintenant
+                    </button>
+                  </div>
+
+                </div>
+              );
+            })
+          )}
+        </div>
       </div>
 
       {/* INVESTMENT CONFIRMATION MODAL */}
