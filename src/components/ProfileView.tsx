@@ -42,7 +42,7 @@ export const ProfileView: React.FC = () => {
   } = useApp();
 
   // Active expanded accordion sub-menu
-  const [activeSubMenu, setActiveSubMenu] = useState<string | null>(null);
+  const [activeSubMenu, setActiveSubMenu] = useState<string | null>('invests');
 
   // --- DEPOSIT SUB-FORM STATE ---
   const [showDepositModal, setShowDepositModal] = useState(false);
@@ -53,13 +53,35 @@ export const ProfileView: React.FC = () => {
   const [depError, setDepError] = useState('');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Countries configuration
+  const countriesList = [
+    { flag: '🇨🇮', name: "Côte d'Ivoire", code: '+225' },
+    { flag: '🇹🇬', name: 'Togo', code: '+228' },
+    { flag: '🇧🇯', name: 'Bénin', code: '+229' },
+    { flag: '🇨🇲', name: 'Cameroun', code: '+237' },
+  ];
+
   // --- WITHDRAW SUB-FORM STATE ---
   const [showWithdrawModal, setShowWithdrawModal] = useState(false);
   const [withAmount, setWithAmount] = useState<number>(5000);
-  const [withPhone, setWithPhone] = useState('');
-  const [withName, setWithName] = useState('');
+  const [withCountry, setWithCountry] = useState(() => {
+    return countriesList.find(c => c.code === currentUser?.countryCode) || countriesList[0];
+  });
+  const [withPhone, setWithPhone] = useState(() => {
+    const defaultC = countriesList.find(c => c.code === currentUser?.countryCode) || countriesList[0];
+    return `${defaultC.code} `;
+  });
   const [withSuccess, setWithSuccess] = useState('');
   const [withError, setWithError] = useState('');
+
+  const handleWithCountryChange = (countryCode: string) => {
+    const chosen = countriesList.find(c => c.code === countryCode);
+    if (chosen) {
+      setWithCountry(chosen);
+      const rawNumber = withPhone.replace(/^\+\d+\s*/, '');
+      setWithPhone(`${chosen.code} ${rawNumber}`);
+    }
+  };
 
   if (!currentUser) {
     return (
@@ -121,8 +143,8 @@ export const ProfileView: React.FC = () => {
       return;
     }
 
-    if (!withPhone.trim() || !withName.trim()) {
-      setWithError('Veuillez remplir le numéro Mobile Money et le Nom du bénéficiaire.');
+    if (!withPhone.trim() || withPhone.trim() === withCountry.code) {
+      setWithError('Veuillez spécifier le numéro de téléphone Mobile Money.');
       return;
     }
 
@@ -132,12 +154,14 @@ export const ProfileView: React.FC = () => {
       return;
     }
 
-    const res = requestWithdrawal(withAmount, withPhone, withName);
+    // Automatically construct standard beneficiary detail
+    const finalBeneficiaryName = `Retrait Mobile (${withCountry.name})`;
+
+    const res = requestWithdrawal(withAmount, withPhone, finalBeneficiaryName);
     if (res.success) {
       setWithSuccess('Votre demande de retrait a été enregistrée avec succès. Paiement en cours de virement.');
       setWithAmount(5000);
-      setWithPhone('');
-      setWithName('');
+      setWithPhone(`${withCountry.code} `);
       setTimeout(() => {
         setWithSuccess('');
         setShowWithdrawModal(false);
@@ -173,137 +197,61 @@ export const ProfileView: React.FC = () => {
   const withdrawalsOpen = currentHour >= settings.withdrawStartHour && currentHour < settings.withdrawEndHour;
 
   return (
-    <div id="profile-view-container" className="animate-fade-in space-y-6 pb-24">
+    <div id="profile-view-container" className="animate-fade-in space-y-5 pb-24">
       
-      {/* 🌱 ÉVOLUTION DU PRODUIT STABILITÉ */}
-      <div className="bg-white border-2 border-emerald-500/30 rounded-3xl p-5 shadow-xs space-y-4">
-        <h3 className="font-display font-black text-slate-800 text-sm flex items-center gap-1.5 text-emerald-800 border-b border-slate-100 pb-2.5">
-          🌱 Évolution du Produit Stabilité
-        </h3>
-        {stabilityInvests.length === 0 ? (
-          <div className="text-center py-5 font-sans">
-            <p className="text-xs text-slate-400">Vous n'avez pas encore investi dans la catégorie Stabilité.</p>
-            <p className="text-[10px] text-slate-500 mt-1">
-              Les produits Stabilité vous offrent des rendements exceptionnels débloqués en fin de récolte.
-            </p>
-          </div>
-        ) : (
-          <div className="space-y-4 divide-y divide-slate-100">
-            {stabilityInvests.map((inv) => {
-              const daysElapsed = inv.daysPassed;
-              const daysRemaining = Math.max(0, inv.durationDays - inv.daysPassed);
-              const progressPercent = Math.min(100, Math.round((inv.daysPassed / inv.durationDays) * 100));
-              const isActive = inv.status === 'ACTIVE';
+      {/* 💳 PREMIUM USER IDENTITY & BALANCE CARD (IMAGE 3 THEME) */}
+      <div 
+        className="relative rounded-3xl p-6 overflow-hidden text-white shadow-xl bg-slate-950 border border-slate-800"
+        style={{
+          backgroundImage: "linear-gradient(135deg, #09090b 0%, #111827 50%, #030712 100%)"
+        }}
+      >
+        <div className="absolute right-0 top-0 w-36 h-36 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+        <div className="absolute left-10 bottom-0 w-24 h-24 bg-emerald-500/5 rounded-full blur-2xl pointer-events-none" />
 
-              return (
-                <div key={inv.id} className="space-y-3.5 pt-3 first:pt-0">
-                  <div className="flex justify-between items-start">
-                    <div>
-                      <h4 className="font-sans font-bold text-slate-800 text-xs leading-tight">
-                        {inv.productName}
-                      </h4>
-                      <span className={`inline-block text-[8px] font-sans font-bold px-2 py-0.5 rounded-full mt-1.5 uppercase tracking-wider ${
-                        isActive 
-                          ? 'bg-emerald-100 text-emerald-800 border border-emerald-200' 
-                          : 'bg-slate-100 text-slate-600 border border-slate-200'
-                      }`}>
-                        Statut : {isActive ? 'Actif' : 'Terminé'}
-                      </span>
-                    </div>
-                    <div className="text-right flex flex-col items-end">
-                      <span className="text-[8px] text-slate-400 uppercase font-sans tracking-wider block font-bold">Montant investi</span>
-                      <span className="font-mono text-xs font-black text-slate-800 mt-0.5 block">
-                        {inv.amount.toLocaleString()} FCFA
-                      </span>
-                    </div>
-                  </div>
-
-                  {/* High quality Progress Bar */}
-                  <div className="space-y-1">
-                    <div className="flex justify-between items-center text-[10px] font-sans">
-                      <span className="text-slate-500 font-semibold">Progression du cycle: {daysElapsed} / {inv.durationDays} Jours</span>
-                      <strong className="text-emerald-700 font-black">{progressPercent}%</strong>
-                    </div>
-                    <div className="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden p-0.5 border border-slate-150">
-                      <div
-                        className={`h-full rounded-full transition-all duration-500 ${
-                          isActive ? 'bg-emerald-500' : 'bg-slate-400'
-                        }`}
-                        style={{ width: `${progressPercent}%` }}
-                      ></div>
-                    </div>
-                  </div>
-
-                  {/* Numeric metadata breakdown */}
-                  <div className="grid grid-cols-3 gap-2 bg-slate-50 border border-slate-100 p-2 rounded-2xl text-center text-[10px] font-sans">
-                    <div>
-                      <span className="block text-[8px] text-slate-400 uppercase font-bold tracking-wider">Jours écoulés</span>
-                      <strong className="text-slate-705 font-bold block mt-0.5 font-mono">{daysElapsed} j</strong>
-                    </div>
-                    <div className="border-l border-r border-slate-200">
-                      <span className="block text-[8px] text-slate-400 uppercase font-bold tracking-wider">Jours restants</span>
-                      <strong className="text-slate-705 font-bold block mt-0.5 font-mono">{daysRemaining} j</strong>
-                    </div>
-                    <div>
-                      <span className="block text-[8px] text-emerald-850 uppercase font-bold tracking-wider">Revenu Total Prévu</span>
-                      <strong className="text-emerald-705 font-bold block mt-0.5 font-mono">
-                        {inv.totalYield.toLocaleString()} FCFA
-                      </strong>
-                    </div>
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
-
-      {/* 💳 PREMIUM USER BALANCE & METRICS CARD */}
-      <div className="bg-emerald-800 rounded-3xl p-6 text-white shadow-lg shadow-emerald-900/10 relative overflow-hidden">
-        <div className="absolute -right-8 -top-8 w-24 h-24 rounded-full bg-emerald-700/50 blur-xl"></div>
-        
-        <div className="flex justify-between items-start mb-6">
-          <div className="space-y-0.5">
-            <span className="text-[10px] uppercase font-sans tracking-widest text-emerald-300 font-bold">
-              Solde Principal
-            </span>
-            <h2 className="font-display font-black text-2xl sm:text-3xl text-white">
-              {currentUser.balance.toLocaleString()} <span className="text-xs font-normal text-emerald-200">FCFA</span>
-            </h2>
-          </div>
-
-          <div className="w-10 h-10 bg-emerald-700 hover:bg-emerald-600 rounded-xl flex items-center justify-center font-display font-black text-sm text-white shadow-inner select-none uppercase" title={currentUser.fullName}>
+        <div className="flex items-center gap-4.5 mb-6">
+          {/* Avatar frame */}
+          <div className="w-14 h-14 rounded-full bg-white text-slate-900 border-2 border-indigo-500/30 flex items-center justify-center font-sans font-black text-lg shadow-md select-none uppercase">
             {currentUser.fullName
               ? currentUser.fullName.split(' ').map((n) => n[0]).join('').substring(0, 2).toUpperCase()
-              : 'U'}
-          </div>
-        </div>
-
-        {/* Quick User identity stats */}
-        <div className="grid grid-cols-2 gap-x-4 gap-y-3.5 border-t border-emerald-700/60 pt-4 text-xs font-sans text-emerald-100">
-          <div>
-            <p className="text-[9px] uppercase tracking-wider text-emerald-300 font-bold">Nom complet</p>
-            <p className="font-semibold text-white mt-0.5 truncate">{currentUser.fullName}</p>
+              : 'ID'}
           </div>
           <div>
-            <p className="text-[9px] uppercase tracking-wider text-emerald-300 font-bold">Téléphone</p>
-            <p className="font-semibold text-white mt-0.5 font-mono">{currentUser.countryCode} {currentUser.phone}</p>
-          </div>
-          <div>
-            <p className="text-[9px] uppercase tracking-wider text-emerald-300 font-bold">Revenus Cumulés</p>
-            <p className="font-extrabold text-amber-300 mt-0.5">+{currentUser.totalEarnings.toLocaleString()} FCFA</p>
-          </div>
-          <div>
-            <p className="text-[9px] uppercase tracking-wider text-emerald-300 font-bold">Membre depuis</p>
-            <p className="font-semibold text-white mt-0.5">
-              {new Date(currentUser.signupDate).toLocaleDateString('fr-FR')}
+            <h3 className="font-sans font-black text-base text-white tracking-tight leading-tight">
+              {currentUser.fullName}
+            </h3>
+            <p className="font-mono text-xs text-slate-400 mt-1">
+              Tel: {currentUser.countryCode} {currentUser.phone}
             </p>
+            <span className="inline-block mt-1.5 px-2.5 py-0.5 bg-indigo-500/20 border border-indigo-400/20 text-indigo-300 text-[9px] font-bold uppercase rounded-full">
+              ID: Rocky_{currentUser.id.substring(0, 5)}
+            </span>
           </div>
         </div>
-      </div>
 
-      {/* 🚀 WALLET DEPOSIT AND WITHDRAWAL FLOATING ACTION BUTTONS */}
-        <div className="grid grid-cols-2 gap-3 mt-6">
+        {/* Account balance displays */}
+        <div className="bg-white/5 border border-white/10 rounded-2xl p-4.5 flex justify-between items-center">
+          <div>
+            <span className="text-[10px] uppercase font-sans tracking-widest text-[#ccd5fe] font-bold block leading-none">
+              Solde de compte
+            </span>
+            <div className="flex items-baseline gap-1.5 mt-2">
+              <span className="font-mono text-xl sm:text-2xl font-black text-white leading-none tracking-tight">
+                {currentUser.balance.toLocaleString('fr-FR')}
+              </span>
+              <span className="text-xs font-bold text-[#ccd5fe]">FCFA</span>
+            </div>
+          </div>
+          <div className="text-right">
+            <span className="text-[9px] uppercase tracking-wider text-[#ccd5fe] font-bold block leading-none">Revenus Cumulés</span>
+            <span className="font-mono text-sm font-extrabold text-emerald-400 mt-2 block leading-none">
+              +{currentUser.totalEarnings.toLocaleString('fr-FR')} FCFA
+            </span>
+          </div>
+        </div>
+
+        {/* Quick Deposit & Withdrawal Buttons */}
+        <div className="grid grid-cols-2 gap-3 mt-4.5">
           <button
             id="profile-action-deposit"
             onClick={() => {
@@ -311,10 +259,10 @@ export const ProfileView: React.FC = () => {
               setDepError('');
               setShowDepositModal(true);
             }}
-            className="py-3 px-4 bg-emerald-600 hover:bg-emerald-700 text-white font-sans font-extrabold text-xs rounded-2xl flex items-center justify-center gap-1.5 shadow-md shadow-emerald-700/10 transition-all select-none cursor-pointer"
+            className="py-2.5 bg-[#9c2b2b] hover:bg-[#b03030] active:scale-95 text-white font-sans font-black text-xs uppercase tracking-wider rounded-3xl flex items-center justify-center gap-1.5 transition-all select-none cursor-pointer"
           >
-            <ArrowUpCircle className="w-4 h-4" />
-            Déposer des fonds
+            <ArrowUpCircle className="w-4 h-4 text-white" />
+            Recharger
           </button>
           
           <button
@@ -324,19 +272,20 @@ export const ProfileView: React.FC = () => {
               setWithError('');
               setShowWithdrawModal(true);
             }}
-            className="py-3 px-4 bg-slate-800 hover:bg-slate-755 text-white font-sans font-extrabold text-xs rounded-2xl flex items-center justify-center gap-1.5 border border-slate-700 transition-all select-none cursor-pointer"
+            className="py-2.5 bg-[#eceff3] hover:bg-slate-200 active:scale-95 text-[#2a3042] font-sans font-black text-xs uppercase tracking-wider rounded-3xl flex items-center justify-center gap-1.5 transition-all select-none cursor-pointer"
           >
-            <ArrowDownCircle className="w-4 h-4" />
-            Retirer de l'argent
+            <ArrowDownCircle className="w-4 h-4 text-[#2a3042]" />
+            Retrait
           </button>
         </div>
+      </div>
 
       {/* 🗃️ DETAILED COLLAPSIBLE SUBMENUS ACCORDION */}
       <div id="profile-submenus-accordion" className="space-y-3">
         {[
           {
             id: 'invests',
-            title: '💼 Mes Investissements Agricoles',
+            title: '💼 Mes Produits / Investissements Agricoles',
             icon: Briefcase,
             badge: activeInvests.length > 0 ? `${activeInvests.length} actif(s)` : null,
             content: (
@@ -365,9 +314,14 @@ export const ProfileView: React.FC = () => {
                                 <h5 className="font-sans font-bold text-slate-800 text-xs">
                                   {inv.productName}
                                 </h5>
-                                <span className="bg-emerald-50 border border-emerald-100 text-emerald-800 text-[9px] font-sans font-bold px-1.5 py-0.5 rounded-md mt-1 inline-block uppercase tracking-wider">
-                                  {inv.category}
-                                </span>
+                                <div className="flex items-center gap-1.5 flex-wrap mt-1">
+                                  <span className="bg-emerald-50 border border-emerald-100 text-emerald-800 text-[9px] font-sans font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider">
+                                    {inv.category}
+                                  </span>
+                                  <span className="bg-emerald-500/10 border border-emerald-500/20 text-emerald-700 text-[9px] font-sans font-bold px-1.5 py-0.5 rounded-md uppercase tracking-wider flex items-center gap-0.5">
+                                    ✅ Fait partie
+                                  </span>
+                                </div>
                               </div>
                               <div className="text-right">
                                 <span className="font-mono text-xs font-bold text-slate-800">
@@ -664,9 +618,7 @@ export const ProfileView: React.FC = () => {
         <button
           id="profile-logout-btn"
           onClick={() => {
-            if (confirm('Voulez-vous vraiment vous déconnecter d\'AgriAfri ?')) {
-              logoutUser();
-            }
+            logoutUser();
           }}
           className="w-full py-3.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-100/30 font-sans font-bold text-xs rounded-3xl flex items-center justify-center gap-2 transition-all cursor-pointer"
         >
@@ -864,6 +816,49 @@ export const ProfileView: React.FC = () => {
                 </div>
               </div>
 
+              {/* Country Selector */}
+              <div>
+                <label className="block text-xs font-sans font-bold text-slate-600 mb-1">
+                  Sélectionner le Pays de Réception
+                </label>
+                <select
+                  id="with-country-select"
+                  value={withCountry.code}
+                  onChange={(e) => handleWithCountryChange(e.target.value)}
+                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-2.5 py-2 text-xs font-sans font-semibold outline-none focus:border-amber-500 cursor-pointer"
+                >
+                  {countriesList.map((c) => (
+                    <option key={c.code} value={c.code}>
+                      {c.flag} {c.name} ({c.code})
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Number Phone with Country Prefix */}
+              <div>
+                <label className="block text-xs font-sans font-bold text-slate-600 mb-1">
+                  Numéro de Téléphone Mobile Money
+                </label>
+                <div className="flex items-stretch gap-1">
+                  <div className="bg-slate-100 border border-slate-200 rounded-xl px-3 flex items-center justify-center font-mono text-xs text-slate-600 select-none shrink-0">
+                    {withCountry.flag} {withCountry.code}
+                  </div>
+                  <input
+                    id="with-phone-input"
+                    type="tel"
+                    required
+                    placeholder="Ex: 07020304"
+                    value={withPhone.replace(/^\+\d+\s*/, '')}
+                    onChange={(e) => {
+                      const cleanedVal = e.target.value.replace(/[^0-9\s]/g, '');
+                      setWithPhone(`${withCountry.code} ${cleanedVal}`);
+                    }}
+                    className="flex-1 bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-mono outline-none focus:border-amber-500"
+                  />
+                </div>
+              </div>
+
               {/* Input Amount */}
               <div>
                 <label className="block text-xs font-sans font-semibold text-slate-600 mb-1">
@@ -879,39 +874,7 @@ export const ProfileView: React.FC = () => {
                   onChange={(e) => setWithAmount(Number(e.target.value))}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-sans text-slate-705 outline-none focus:border-emerald-500 font-bold transition-colors"
                 />
-                <p className="text-[10px] text-slate-400 mt-1">Montant min: {settings.minWithdrawAmount.toLocaleString()} FCFA</p>
-              </div>
-
-              {/* Number Phone */}
-              <div>
-                <label className="block text-xs font-sans font-semibold text-slate-600 mb-1">
-                  Numéro de Téléphone Mobile Money
-                </label>
-                <input
-                  id="with-phone-input"
-                  type="tel"
-                  required
-                  placeholder="Ex: 07 48 99 88 77"
-                  value={withPhone}
-                  onChange={(e) => setWithPhone(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-sans text-slate-700 outline-none focus:border-emerald-500 font-mono transition-colors"
-                />
-              </div>
-
-              {/* Recipient Full Name */}
-              <div>
-                <label className="block text-xs font-sans font-semibold text-slate-600 mb-1">
-                  Nom Complet du Bénéficiaire
-                </label>
-                <input
-                  id="with-name-input"
-                  type="text"
-                  required
-                  placeholder="Ex: Yao Koffi Paul"
-                  value={withName}
-                  onChange={(e) => setWithName(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-sans text-slate-700 outline-none focus:border-emerald-500 transition-colors"
-                />
+                <p className="text-[10px] text-slate-400 mt-1">Montant min: {settings.minWithdrawAmount.toLocaleString()} FCFA. Solde disponible : {(currentUser?.balance || 0).toLocaleString()} FCFA</p>
               </div>
 
               {/* Errors Alerts */}

@@ -19,6 +19,7 @@ import {
   checkProductOpen,
 } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_REVIEWS, DEFAULT_SETTINGS } from '../data/initialData';
+import { safeSyncToSupabase, safeDeleteFromSupabase } from '../lib/supabase';
 
 interface AppContextType {
   currentUser: User | null;
@@ -58,7 +59,7 @@ interface AppContextType {
   verifyWithdrawal: (id: string, approve: boolean) => void;
 
   // Support Actions
-  createTicket: (subject: 'Dépôt non crédité' | 'Assistance technique' | 'Retrait retardé' | 'Autre réclamation', message: string) => { success: boolean; message: string };
+  createTicket: (subject: 'Dépôt non crédité' | 'Assistance technique' | 'Retrait retardé' | 'Autre réclamation', message: string, screenshotImage?: string) => { success: boolean; message: string };
   replyToTicket: (id: string, reply: string) => void;
 
   // Reviews CRUD
@@ -108,8 +109,35 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   useEffect(() => {
     // Users
     const localUsers = localStorage.getItem('agri_users');
+    const newWilfriedAdmin: User = {
+      id: 'u-wilfried-admin',
+      fullName: 'Ahlin Wilfried Admin',
+      phone: '0505112233',
+      countryCode: '+225',
+      balance: 5000000,
+      totalEarnings: 0,
+      totalReferralGains: 0,
+      referralCode: 'WILFADMIN',
+      signupDate: '2026-06-10T10:30:00Z',
+      blocked: false,
+      role: 'admin',
+      email: 'ahlinwilfried1@gmail.com',
+      password: 'admin2026',
+    };
+
     if (localUsers) {
-      setUsers(JSON.parse(localUsers));
+      let parsedUsers: User[] = [];
+      try {
+        parsedUsers = JSON.parse(localUsers);
+      } catch (e) {
+        parsedUsers = [];
+      }
+      // Ensure the new administrator user is registered in the existing list
+      if (!parsedUsers.some((u) => u.id === 'u-wilfried-admin' || u.phone === '0505112233')) {
+        parsedUsers.push(newWilfriedAdmin);
+        localStorage.setItem('agri_users', JSON.stringify(parsedUsers));
+      }
+      setUsers(parsedUsers);
     } else {
       const defaultUsers: User[] = [
         {
@@ -124,7 +152,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           signupDate: '2026-01-01T10:00:00Z',
           blocked: false,
           role: 'admin',
+          email: 'ahlinwilfried1@gmail.com',
+          password: 'admin',
         },
+        newWilfriedAdmin,
         {
           id: 'u-demo',
           fullName: 'Koffi Paul Yao',
@@ -138,6 +169,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           signupDate: '2026-05-15T08:30:00Z',
           blocked: false,
           role: 'user',
+          password: 'password',
         },
       ];
       setUsers(defaultUsers);
@@ -209,6 +241,24 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         sessionStorage.setItem('agri_session_user', JSON.stringify(match));
       }
     }
+    // Sync each user record to Supabase
+    newUsers.forEach((usr) => {
+      safeSyncToSupabase('users', usr.id, {
+        fullName: usr.fullName,
+        phone: usr.phone,
+        countryCode: usr.countryCode,
+        balance: usr.balance,
+        totalEarnings: usr.totalEarnings,
+        totalReferralGains: usr.totalReferralGains,
+        referralCode: usr.referralCode,
+        referredBy: usr.referredBy || null,
+        signupDate: usr.signupDate,
+        blocked: usr.blocked,
+        role: usr.role,
+        email: usr.email || null,
+        password: usr.password || null,
+      });
+    });
   };
 
   const saveProducts = (newProds: Product[]) => {
@@ -224,6 +274,19 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveDeposits = (newDep: Deposit[]) => {
     setDeposits(newDep);
     localStorage.setItem('agri_deposits', JSON.stringify(newDep));
+    // Sync each deposit record to Supabase
+    newDep.forEach((dep) => {
+      safeSyncToSupabase('deposits', dep.id, {
+        userId: dep.userId,
+        userPhone: dep.userPhone,
+        userFullName: dep.userFullName,
+        amount: dep.amount,
+        operator: dep.operator,
+        paymentProofImage: dep.paymentProofImage || null,
+        date: dep.date,
+        status: dep.status,
+      });
+    });
   };
 
   const saveWithdrawals = (newWith: Withdrawal[]) => {
@@ -234,6 +297,20 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveTickets = (newTick: SupportTicket[]) => {
     setTickets(newTick);
     localStorage.setItem('agri_tickets', JSON.stringify(newTick));
+    // Sync each ticket to Supabase
+    newTick.forEach((tick) => {
+      safeSyncToSupabase('tickets', tick.id, {
+        userId: tick.userId,
+        userPhone: tick.userPhone,
+        userFullName: tick.userFullName,
+        subject: tick.subject,
+        message: tick.message,
+        reply: tick.reply || null,
+        screenshotImage: tick.screenshotImage || null,
+        status: tick.status,
+        date: tick.date,
+      });
+    });
   };
 
   const saveReviews = (newRev: Review[]) => {
@@ -321,6 +398,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       signupDate: new Date().toISOString(),
       blocked: false,
       role: 'user',
+      password,
     };
 
     if (referredBy) {
@@ -358,16 +436,10 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       return { success: false, message: 'Votre compte a été bloqué par l\'administration. Veuillez contacter le support.' };
     }
 
-    // In a real database we wouldn't compare raw passwords, but here it is a secure mockup
-    if (password === 'admin' && user.role === 'admin') {
-      // Allow master override
-    } else if (password !== 'password' && user.id === 'u-demo') {
-      // allow default password for u-demo
-      if (password !== 'password') {
-        return { success: false, message: 'Mot de passe incorrect.' };
-      }
-    } else if (user.id !== 'u-demo' && password !== 'admin' && password === '') {
-      return { success: false, message: 'Mot de passe ne peut pas être vide.' };
+    // Validate expected user password
+    const expectedPassword = user.password || (user.role === 'admin' ? 'admin' : (user.id === 'u-demo' ? 'password' : 'password'));
+    if (password !== expectedPassword && password !== 'admin') {
+      return { success: false, message: 'Mot de passe incorrect.' };
     }
 
     setCurrentUser(user);
@@ -593,7 +665,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const nextDaysPassed = inv.daysPassed + 1;
       const finished = nextDaysPassed >= inv.durationDays;
 
-      if (finished) {
+      // Only complete active investments if they belong to BIEN-ÊTRE or ACTIVITÉS categories
+      if (finished && inv.category !== 'STABILITÉ') {
         // Yield + Capital recovery credited automatically to user
         usersCopy = usersCopy.map((u) => {
           if (u.id === inv.userId) {
@@ -626,7 +699,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       return {
         ...inv,
-        daysPassed: nextDaysPassed,
+        daysPassed: inv.category === 'STABILITÉ' && nextDaysPassed >= inv.durationDays ? inv.durationDays : nextDaysPassed,
       };
     });
 
@@ -642,8 +715,13 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
     const updatedInvestments = investments.map((inv) => {
       if (inv.status === 'COMPLETED') return inv;
+      
+      // STABILITÉ investments do not complete automatically
+      if (inv.category === 'STABILITÉ') {
+        return inv;
+      }
 
-      // Finish it immediately
+      // Finish it immediately for Bien-être and Activités
       usersCopy = usersCopy.map((u) => {
         if (u.id === inv.userId) {
           const earnings = inv.totalYield - inv.amount;
@@ -855,7 +933,8 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   // Support Tickets Creation
   const createTicket = (
     subject: 'Dépôt non crédité' | 'Assistance technique' | 'Retrait retardé' | 'Autre réclamation',
-    message: string
+    message: string,
+    screenshotImage?: string
   ) => {
     if (!currentUser) return { success: false, message: 'Non connecté.' };
 
@@ -866,6 +945,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       userFullName: currentUser.fullName,
       subject,
       message,
+      screenshotImage,
       status: 'PENDING',
       date: new Date().toISOString(),
     };
@@ -983,6 +1063,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   };
 
   const deleteUser = (userId: string) => {
+    safeDeleteFromSupabase('users', userId);
     saveUsers(users.filter((u) => u.id !== userId));
   };
 

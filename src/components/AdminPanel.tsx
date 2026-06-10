@@ -69,6 +69,7 @@ export const AdminPanel: React.FC = () => {
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editUserName, setEditUserName] = useState('');
   const [editUserPhone, setEditUserPhone] = useState('');
+  const [editUserPassword, setEditUserPassword] = useState('');
   const [balanceAdjustmentAmount, setBalanceAdjustmentAmount] = useState<number>(0);
 
   // New Product state
@@ -171,9 +172,9 @@ export const AdminPanel: React.FC = () => {
   };
 
   const handleUserSaveInfo = (userId: string) => {
-    editUserDetail(userId, { fullName: editUserName, phone: editUserPhone });
+    editUserDetail(userId, { fullName: editUserName, phone: editUserPhone, password: editUserPassword });
     setEditingUserId(null);
-    alert('Profil édité avec succès !');
+    alert('Profil édité avec succès ! (Le mot de passe de l’utilisateur a été mis à jour)');
   };
 
   const submitTicketReply = (id: string) => {
@@ -395,7 +396,7 @@ export const AdminPanel: React.FC = () => {
                 {/* Sub edit settings area */}
                 {editingUserId === u.id ? (
                   <div className="bg-slate-50 rounded-2xl p-4 space-y-3 border border-slate-100">
-                    <div className="grid grid-cols-2 gap-2">
+                    <div className="grid grid-cols-3 gap-2">
                       <div>
                         <label className="text-[9px] text-slate-400 uppercase font-sans">Ajuster Nom</label>
                         <input
@@ -414,6 +415,17 @@ export const AdminPanel: React.FC = () => {
                           value={editUserPhone}
                           onChange={(e) => setEditUserPhone(e.target.value)}
                           className="w-full bg-white border rounded-lg px-2 py-1 text-xs font-sans text-slate-750 outline-none"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[9px] text-slate-400 uppercase font-sans text-amber-600 font-bold">Mot de passe</label>
+                        <input
+                          id="adjust-password-input"
+                          type="text"
+                          value={editUserPassword}
+                          onChange={(e) => setEditUserPassword(e.target.value)}
+                          className="w-full bg-white border rounded-lg px-2 py-1 text-xs font-sans text-slate-750 outline-none font-bold text-amber-700"
+                          placeholder="Entrez le mot de passe"
                         />
                       </div>
                     </div>
@@ -473,6 +485,7 @@ export const AdminPanel: React.FC = () => {
                         setEditingUserId(u.id);
                         setEditUserName(u.fullName);
                         setEditUserPhone(u.phone);
+                        setEditUserPassword(u.password || 'password');
                         setBalanceAdjustmentAmount(0);
                       }}
                       className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-600 rounded-xl text-[10px] font-sans font-bold transition-colors select-none"
@@ -888,6 +901,20 @@ export const AdminPanel: React.FC = () => {
                   <p className="font-sans text-xs text-slate-600 bg-slate-50 p-3 rounded-2xl border border-slate-100/30">
                     "{t.message}"
                   </p>
+
+                  {t.screenshotImage && (
+                    <div className="pt-1 pb-2">
+                      <p className="text-[9px] text-slate-400 font-sans uppercase font-fold mb-1">Capture jointe :</p>
+                      <button
+                        id={`btn-view-ticket-proof-${t.id}`}
+                        onClick={() => setTargetProofImage(t.screenshotImage || null)}
+                        className="px-2.5 py-1.5 bg-amber-50 text-amber-800 border border-amber-100 hover:bg-amber-100 rounded-xl text-[10px] font-sans font-bold flex items-center gap-1 transition-colors select-none"
+                      >
+                        <Camera className="w-3.5 h-3.5 text-amber-600" />
+                        Voir la capture d'écran jointe
+                      </button>
+                    </div>
+                  )}
 
                   {t.reply && (
                     <div className="bg-emerald-50/50 border border-emerald-100/30 p-3 rounded-2xl text-xs font-sans text-emerald-900">

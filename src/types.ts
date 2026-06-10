@@ -17,6 +17,8 @@ export interface User {
   blocked: boolean;
   role: 'user' | 'admin';
   freeSpins?: number;
+  email?: string;
+  password?: string;
 }
 
 export type ProductCategory = 'STABILITÉ' | 'BIEN-ÊTRE' | 'ACTIVITÉS';
@@ -31,6 +33,7 @@ export interface Product {
   active: boolean;
   iconName: string;
   description?: string;
+  image?: string; // Real attractive crop image
   openingTime?: string; // HH:MM, e.g. "10:00"
   closingTime?: string; // HH:MM, e.g. "10:10"
   availabilityDurationMinutes?: number; // Duration of availability in minutes
@@ -84,6 +87,7 @@ export interface SupportTicket {
   subject: 'Dépôt non crédité' | 'Assistance technique' | 'Retrait retardé' | 'Autre réclamation';
   message: string;
   reply?: string;
+  screenshotImage?: string; // base64 representation of any attached file or deposit proof
   status: 'PENDING' | 'RESOLVED';
   date: string;
 }

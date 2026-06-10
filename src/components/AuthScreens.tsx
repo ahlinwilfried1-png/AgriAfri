@@ -5,7 +5,7 @@
 
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
-import { Lock, Phone, User, Landmark, ShieldCheck, ArrowRight, Eye, EyeOff, Sparkles } from 'lucide-react';
+import { Lock, Phone, User, Landmark, ShieldCheck, ArrowRight, Eye, EyeOff, Sparkles, ChevronDown, Link, Check } from 'lucide-react';
 
 interface AuthScreensProps {
   onSuccess: () => void;
@@ -18,29 +18,49 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
   const [isLoginView, setIsLoginView] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
 
-  // Common Phone Country indices structure
+  // Common Phone Country indices structure (Togo first with flags)
   const countries = [
-    { code: '+225', name: 'Côte d\'Ivoire 🇨🇮' },
-    { code: '+221', name: 'Sénégal 🇸🇳' },
-    { code: '+226', name: 'Burkina Faso 🇧🇫' },
-    { code: '+228', name: 'Togo 🇹🇬' },
-    { code: '+229', name: 'Bénin 🇧🇯' },
-    { code: '+223', name: 'Mali 🇲🇱' },
-    { code: '+227', name: 'Niger 🇳🇪' },
-    { code: '+237', name: 'Cameroun 🇨🇲' },
+    { code: '+228', name: 'Togo 🇹🇬', flag: '🇹🇬' },
+    { code: '+225', name: 'Côte d\'Ivoire 🇨🇮', flag: '🇨🇮' },
+    { code: '+221', name: 'Sénégal 🇸🇳', flag: '🇸🇳' },
+    { code: '+226', name: 'Burkina Faso 🇧🇫', flag: '🇧🇫' },
+    { code: '+229', name: 'Bénin 🇧🇯', flag: '🇧🇯' },
+    { code: '+223', name: 'Mali 🇲🇱', flag: '🇲🇱' },
+    { code: '+227', name: 'Niger 🇳🇪', flag: '🇳🇪' },
+    { code: '+237', name: 'Cameroun 🇨🇲', flag: '🇨🇲' },
   ];
 
   // --- REGISTRATION FIELDS ---
   const [regName, setRegName] = useState('');
   const [regPhone, setRegPhone] = useState('');
-  const [regCountryCode, setRegCountryCode] = useState('+225');
+  const [regCountryCode, setRegCountryCode] = useState('+228');
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [regInviteCode, setRegInviteCode] = useState('');
   
+  // Custom states for verification OTP simulation
+  const [otpSent, setOtpSent] = useState(false);
+  const [isSendingOtp, setIsSendingOtp] = useState(false);
+
   // Automated live OTP code for registration (completely offline/network simulated, no SMS)
   const [regOtpCode] = useState(() => Math.floor(100000 + Math.random() * 900000).toString());
-  const [otpInput, setOtpInput] = useState(regOtpCode);
+  const [otpInput, setOtpInput] = useState('');
+
+  const handleSendOtp = () => {
+    if (!regPhone.trim()) {
+      setAuthError('Veuillez introduire votre numéro de téléphone d\'abord.');
+      return;
+    }
+    setIsSendingOtp(true);
+    setAuthError(null);
+    setTimeout(() => {
+      setIsSendingOtp(false);
+      setOtpSent(true);
+      const code = Math.floor(100000 + Math.random() * 900000).toString();
+      setOtpInput(code);
+      alert(`[AgriAfri OTP] Votre code de vérification est: ${code}`);
+    }, 800);
+  };
 
   // Automated live OTP code for login (purely for secure visual consistency)
   const [loginOtpCode] = useState(() => Math.floor(100000 + Math.random() * 900000).toString());
@@ -68,22 +88,17 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
     e.preventDefault();
     setAuthError(null);
 
-    if (!regName.trim() || !regPhone.trim() || !regPassword.trim() || !regConfirmPassword.trim()) {
+    if (!regName.trim() || !regPhone.trim() || !regPassword.trim()) {
       setAuthError('Tous les champs sont requis.');
       return;
     }
 
-    if (regPassword.length < 4) {
-      setAuthError('Le mot de passe doit faire au moins 4 caractères.');
+    if (regPassword.length < 6) {
+      setAuthError('Le mot de passe doit faire au moins 6 caractères.');
       return;
     }
 
-    if (regPassword !== regConfirmPassword) {
-      setAuthError('Confirmation de mot de passe invalide. Les mots de passe diffèrent.');
-      return;
-    }
-
-    // Attempt registration
+    // Attempt registration (confirm is same as password since confirm field is removed)
     const signup = registerUser(regName, regPhone, regCountryCode, regPassword, regInviteCode);
     if (signup.success) {
       alert('Votre compte AgriAfri a été créé avec succès ! Connecté automatiquement.');
@@ -252,23 +267,6 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
                 </div>
               </div>
 
-              {/* Automated Login Verification Code (OTP) */}
-              <div className="space-y-1">
-                <label className="block text-xs font-semibold text-slate-600">
-                  Code de sécurité OTP
-                </label>
-                <input
-                  id="login-otp-code-input"
-                  type="text"
-                  readOnly
-                  value={loginOtpInput}
-                  className="w-full bg-slate-105 border border-slate-200 rounded-2xl px-3 py-2.5 text-xs font-mono text-center tracking-[0.4em] font-semibold text-slate-500 cursor-not-allowed select-none"
-                />
-                <span className="text-[10px] text-emerald-700 font-bold block text-center">
-                  ✓ Code OTP vérifié automatiquement
-                </span>
-              </div>
-
               {/* Action Trigger */}
               <button
                 id="login-submit-btn"
@@ -293,155 +291,137 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
                 </button>
               </div>
 
-
             </form>
           ) : (
             /* ======================= VIEW: REGISTRATION SCREEN ======================= */
             <form onSubmit={handleRegisterSubmit} className="space-y-4">
               
-              {/* Full Name */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
-                  Nom Complet
+              {/* Pays Dropdown */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-500">
+                  Pays
                 </label>
-                <div className="relative">
-                  <User className="absolute left-3.5 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                  <input
-                    id="reg-name"
-                    type="text"
-                    required
-                    placeholder="Ex: Kouamé N'Guessan"
-                    value={regName}
-                    onChange={(e) => setRegName(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-10 pr-3 py-2.5 text-xs text-slate-700 outline-none focus:border-emerald-500 transition-colors"
-                  />
-                </div>
-              </div>
-
-              {/* Phone + Dial-code */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
-                  Numéro de Téléphone Mobile Money
-                </label>
-                <div className="flex gap-1.5">
-                  {/* Custom indicatif pays list selection */}
+                <div className="relative bg-[#eceff3] rounded-2xl">
                   <select
                     id="reg-country-code"
                     value={regCountryCode}
                     onChange={(e) => setRegCountryCode(e.target.value)}
-                    className="bg-slate-50 border border-slate-200 rounded-2xl px-2 py-2.5 text-xs font-sans text-slate-600 outline-none focus:border-emerald-500 shrink-0 w-28 text-center"
+                    className="w-full bg-transparent border-none rounded-2xl px-4 py-3.5 pr-10 text-xs font-semibold text-slate-700 outline-none appearance-none cursor-pointer"
                   >
                     {countries.map((c) => (
                       <option key={c.code} value={c.code}>
-                        {c.code}
+                        {c.flag} {c.name} ({c.code})
                       </option>
                     ))}
                   </select>
-
-                  <div className="relative flex-1">
-                    <Phone className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-                    <input
-                      id="reg-phone"
-                      type="tel"
-                      required
-                      placeholder="Ex: 0701020304"
-                      value={regPhone}
-                      onChange={(e) => setRegPhone(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-2xl pl-9 pr-3 py-2.5 text-xs font-mono text-slate-700 outline-none focus:border-emerald-500 transition-colors"
-                    />
+                  <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+                    <ChevronDown className="w-4 h-4" />
                   </div>
                 </div>
               </div>
 
-              {/* Password inputs */}
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Mot de passe
-                  </label>
+              {/* Numéro de téléphone */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-500">
+                  Numéro de téléphone
+                </label>
+                <div className="bg-[#eceff3] rounded-2xl px-4 py-3.5">
+                  <input
+                    id="reg-phone"
+                    type="tel"
+                    required
+                    placeholder="Numéro de téléphone"
+                    value={regPhone}
+                    onChange={(e) => setRegPhone(e.target.value)}
+                    className="w-full bg-transparent border-none text-xs text-slate-705 outline-none focus:ring-0 p-0"
+                  />
+                </div>
+              </div>
+
+              {/* Surnom (Full Name) */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-500">
+                  Surnom
+                </label>
+                <div className="bg-[#eceff3] rounded-2xl px-4 py-3.5">
+                  <input
+                    id="reg-name"
+                    type="text"
+                    required
+                    placeholder="Surnom"
+                    value={regName}
+                    onChange={(e) => setRegName(e.target.value)}
+                    className="w-full bg-transparent border-none text-xs text-slate-705 outline-none focus:ring-0 p-0"
+                  />
+                </div>
+              </div>
+
+              {/* Mot de passe */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-500">
+                  Mot de passe
+                </label>
+                <div className="relative bg-[#eceff3] rounded-2xl flex items-center pr-4 pl-4 py-3.5">
                   <input
                     id="reg-password"
                     type={secureEyeRegister ? 'text' : 'password'}
                     required
-                    placeholder="Min 4 caractères"
+                    placeholder="Mot de passe de connexion (min. 6 caractè)"
                     value={regPassword}
                     onChange={(e) => setRegPassword(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2.5 text-xs text-slate-705 outline-none focus:border-emerald-500 transition-colors"
+                    className="flex-1 bg-transparent border-none text-xs text-slate-705 outline-none p-0 focus:ring-0 pr-2"
                   />
-                </div>
-                <div>
-                  <label className="block text-xs font-semibold text-slate-600 mb-1">
-                    Confirmer
-                  </label>
-                  <input
-                    id="reg-confirm-password"
-                    type={secureEyeRegister ? 'text' : 'password'}
-                    required
-                    placeholder="Identique"
-                    value={regConfirmPassword}
-                    onChange={(e) => setRegConfirmPassword(e.target.value)}
-                    className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3 py-2.5 text-xs text-slate-705 outline-none focus:border-emerald-500 transition-colors"
-                  />
+                  <button
+                    type="button"
+                    onClick={() => setSecureEyeRegister(!secureEyeRegister)}
+                    className="text-slate-400 hover:text-slate-600 cursor-pointer shrink-0"
+                  >
+                    {secureEyeRegister ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
                 </div>
               </div>
 
-              {/* Optional Referral Invite Code */}
-              <div>
-                <label className="block text-xs font-semibold text-slate-600 mb-1">
-                  Code de Parrainage (Optionnel)
+              {/* Code d'invitation */}
+              <div className="space-y-1">
+                <label className="block text-xs font-semibold text-slate-500">
+                  Code d'invitation
                 </label>
-                <input
-                  id="reg-invite"
-                  type="text"
-                  placeholder="Ex: KOFC39"
-                  value={regInviteCode}
-                  onChange={(e) => setRegInviteCode(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-200 rounded-2xl px-3.5 py-2.5 text-xs font-mono text-slate-700 outline-none focus:border-emerald-500 uppercase tracking-widest"
-                />
-              </div>
-
-              {/* AUTOMATED OTP CODE VERIFICATION HARNESS CONTAINER */}
-              <div className="space-y-1.5 border-t border-slate-105 pt-3">
-                <label className="block text-xs font-semibold text-slate-600">
-                  Code de validation OTP
-                </label>
-                <div>
+                <div className="relative bg-[#eceff3] rounded-2xl flex items-center pr-4 pl-4 py-3.5">
                   <input
-                    id="reg-otp-code-input"
+                    id="reg-invite"
                     type="text"
-                    readOnly
-                    value={otpInput}
-                    className="w-full bg-slate-105 border border-slate-200 rounded-2xl px-3 py-2.5 text-xs font-mono text-center tracking-[0.4em] font-semibold text-slate-500 cursor-not-allowed select-none"
+                    placeholder="Veuillez entrer le code d'invitation (requis)"
+                    value={regInviteCode}
+                    onChange={(e) => setRegInviteCode(e.target.value)}
+                    className="flex-1 bg-transparent border-none text-xs text-slate-750 outline-none p-0 focus:ring-0 pr-2 uppercase font-mono"
                   />
+                  <Link className="w-4 h-4 text-slate-400 shrink-0 pointer-events-none" />
                 </div>
-                <p className="text-[10px] text-emerald-800 font-bold block text-center">
-                  ⚡ Code OTP généré et validé automatiquement par le système (Aucun SMS requis)
-                </p>
               </div>
 
-              {/* Register Button */}
+
+
+              {/* Solid blue register button */}
               <button
                 id="reg-submit-btn"
                 type="submit"
-                className="w-full py-3 bg-emerald-600 hover:bg-emerald-700 text-white font-sans font-bold text-xs rounded-2xl mt-2 cursor-pointer select-none transition-all flex items-center justify-center gap-1.5 shadow-md shadow-emerald-500/10"
+                className="w-full py-4 bg-[#0f62fe] hover:bg-blue-700 text-white font-sans font-bold text-sm rounded-3xl mt-6 cursor-pointer select-none transition-all flex items-center justify-center shadow-lg shadow-blue-500/10"
               >
                 S'inscrire
-                <ShieldCheck className="w-4 h-4" />
               </button>
 
-              <div className="text-center mt-5 pt-4 border-t border-slate-100">
-                <button
-                  id="switch-to-login-btn"
-                  type="button"
-                  onClick={() => {
-                    setIsLoginView(true);
-                    setAuthError(null);
-                  }}
-                  className="text-xs font-bold text-emerald-600 hover:text-emerald-700 font-display transition-all cursor-pointer"
-                >
-                  Se connecter
-                </button>
-              </div>
+              {/* Outlined blue login redirection button */}
+              <button
+                id="switch-to-login-btn"
+                type="button"
+                onClick={() => {
+                  setIsLoginView(true);
+                  setAuthError(null);
+                }}
+                className="w-full py-3.5 bg-transparent hover:bg-blue-50 text-[#0f62fe] border border-[#0f62fe] font-sans font-bold text-xs rounded-3xl mt-3 cursor-pointer select-none transition-all flex items-center justify-center"
+              >
+                Se connecter maintenant
+              </button>
             </form>
           )}
 

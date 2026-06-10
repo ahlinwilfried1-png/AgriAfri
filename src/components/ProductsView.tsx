@@ -54,6 +54,51 @@ const renderProductIcon = (iconName: string, category: ProductCategory) => {
   }
 };
 
+// Helper function to resolve real professional photos for agricultural and farming products
+export const getProductRealImage = (name: string, defaultImage?: string): string => {
+  const norm = name.toLowerCase();
+  if (norm.includes('mangue') || norm.includes('mango')) {
+    return '/src/assets/images/mango_plantation_crop_1781088500216.png';
+  }
+  if (norm.includes('maïs') || norm.includes('mais') || norm.includes('corn')) {
+    return '/src/assets/images/corn_field_gold_1781088517399.png';
+  }
+  if (norm.includes('poulet') || norm.includes('chicken') || norm.includes('volaille') || norm.includes('poultry') || norm.includes('egg')) {
+    return '/src/assets/images/poultry_breeding_1781087460448.png';
+  }
+  if (norm.includes('cacao') || norm.includes('cocoa')) {
+    return '/src/assets/images/cacao_ivory_coast_1781087425613.png';
+  }
+  if (norm.includes('anacarde') || norm.includes('cashew')) {
+    return '/src/assets/images/anacarde_orchard_1781087442993.png';
+  }
+  if (norm.includes('solar') || norm.includes('solaire') || norm.includes('pompe') || norm.includes('irrigation') || norm.includes('forage')) {
+    return '/src/assets/images/solar_forage_1781087475485.png';
+  }
+  if (norm.includes('hévéa') || norm.includes('hevea') || norm.includes('rubber') || norm.includes('latex')) {
+    return 'https://images.unsplash.com/photo-1599599810769-bcde5a160d32?auto=format&fit=crop&q=80&w=600';
+  }
+  if (norm.includes('tomate') || norm.includes('tomato')) {
+    return 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&q=80&w=600';
+  }
+  if (norm.includes('banane') || norm.includes('banana') || norm.includes('plantain')) {
+    return 'https://images.unsplash.com/photo-1564349683136-77e08dba1ef7?auto=format&fit=crop&q=80&w=600';
+  }
+  if (norm.includes('riz') || norm.includes('rice')) {
+    return 'https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&q=80&w=600';
+  }
+  if (norm.includes('serre') || norm.includes('greenhouse')) {
+    return 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?auto=format&fit=crop&q=80&w=600';
+  }
+  if (norm.includes('silo') || norm.includes('entrepôt') || norm.includes('storage')) {
+    return 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&q=80&w=600';
+  }
+  if (norm.includes('motoculteur') || norm.includes('tracteur') || norm.includes('settings') || norm.includes('mecanic') || norm.includes('mécanisation')) {
+    return 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&q=80&w=600';
+  }
+  return defaultImage || 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&q=80&w=600';
+};
+
 export const ProductsView: React.FC = () => {
   const { products, currentUser, investInProduct, investments, settings } = useApp();
   const [activeCategory, setActiveCategory] = useState<ProductCategory>('STABILITÉ');
@@ -102,7 +147,6 @@ export const ProductsView: React.FC = () => {
 
   const handleInvestClick = (prod: Product) => {
     if (isRuleActive && prod.category !== 'STABILITÉ' && !hasActiveStability) {
-      alert("Veuillez d'abord activer un produit de la catégorie Stabilité pour continuer.");
       return;
     }
     if (prod.category !== 'STABILITÉ') {
@@ -127,7 +171,7 @@ export const ProductsView: React.FC = () => {
 
     const res = investInProduct(selectedProduct.id);
     if (res.success) {
-      setSuccessMessage('Félicitations ! Votre investissement a été validé.');
+      setSuccessMessage('✅ Achat réussi');
       setTimeout(() => {
         setSelectedProduct(null);
         setSuccessMessage(null);
@@ -176,223 +220,172 @@ export const ProductsView: React.FC = () => {
           desc: 'Financement direct d\'outillage et équipements agricoles lourds (Tracteurs, Serres irriguées, Hydro-forages) en cycles programmés.',
           badge: '📈 OPTION DE RECOUPREMENT : Retours d\'intérêts versés de façon automatique à la clôture.',
           themeColor: 'amber',
-          bgHeader: 'bg-amber-50 text-amber-800 border-amber-100',
+          bgHeader: 'bg-amber-50 text-amber-805 border-amber-100',
         };
     }
   };
 
   return (
-    <div id="products-view-container" className="animate-fade-in space-y-7 pb-24">
+    <div id="products-view-container" className="animate-fade-in space-y-5 pb-24">
       
-      {/* 🏷️ VERTICAL PREMIUM ONGLETS / SELECTION MENUS */}
-      <div className="bg-white border border-slate-200/70 rounded-3xl p-4.5 shadow-2xs space-y-2.5">
-        <p className="text-[10px] uppercase tracking-widest text-slate-400 font-extrabold text-center block">
-          Catégories Verticaux d'Investissement
-        </p>
-        <div className="flex flex-col gap-2">
-          {[
-            { id: 'STABILITÉ', label: 'Stabilité 🌱', desc: 'Cycles longs (Forts Rendements)' },
-            { id: 'BIEN-ÊTRE', label: 'Bien-être ❤️', desc: 'Cycles courts (Maraîcher, Élevage)' },
-            { id: 'ACTIVITÉS', label: 'Activités 🚜', desc: 'Machineries & Outillages' },
-          ].map((item) => {
-            const isActive = activeCategory === item.id;
-            const locked = isCategoryLocked(item.id as ProductCategory);
-            return (
-              <button
-                id={`filter-cat-${item.id}`}
-                key={item.id}
-                onClick={() => selectCategory(item.id as ProductCategory)}
-                className={`w-full flex items-center justify-between p-3.5 rounded-2xl border transition-all cursor-pointer select-none text-left ${
-                  isActive
-                    ? item.id === 'STABILITÉ'
-                      ? 'bg-emerald-600 border-emerald-600 text-white shadow-md font-bold'
-                      : item.id === 'BIEN-ÊTRE'
-                      ? 'bg-rose-600 border-rose-600 text-white shadow-md font-bold'
-                      : 'bg-amber-600 border-amber-600 text-white shadow-md font-bold'
-                    : 'bg-slate-50 hover:bg-slate-100/80 border-slate-205 text-slate-705'
-                }`}
-              >
-                <div className="flex flex-col">
-                  <span className="font-display text-xs font-black tracking-wide block uppercase flex items-center gap-1.5">
-                    {item.label}
-                    {locked && (
-                      <span className="text-[9px] bg-rose-500/15 text-rose-650 px-1.5 py-0.5 rounded-md border border-rose-500/20 font-black">
-                        🔒 VERROUILLÉ
-                      </span>
-                    )}
-                  </span>
-                  <span className={`text-[9px] mt-0.5 leading-tight ${isActive ? 'text-white/80' : 'text-slate-405'}`}>
-                    {item.desc}
-                  </span>
-                </div>
-                <span className="text-xs font-bold leading-none select-none">
-                  {locked ? (
-                    <span className="text-[10px] uppercase font-black text-rose-600 bg-rose-100/50 px-2 py-1 rounded-md">Verrouillé</span>
-                  ) : isActive ? (
-                    '● Actif'
-                  ) : (
-                    '○ Choisir'
-                  )}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+      {/* 🏷️ HORIZONTAL PREMIUM ONGLETS / SELECTION MENUS */}
+      <div className="bg-[#eceff3] p-1.5 rounded-2xl flex gap-1.5 shadow-2xs">
+        {(['STABILITÉ', 'BIEN-ÊTRE', 'ACTIVITÉS'] as ProductCategory[]).map((cat) => {
+          const isActive = activeCategory === cat;
+          return (
+            <button
+              id={`filter-cat-${cat}`}
+              key={cat}
+              onClick={() => setActiveCategory(cat)}
+              className={`flex-1 py-2.5 text-center text-[11px] font-sans font-black tracking-wider uppercase rounded-xl transition-all cursor-pointer ${
+                isActive
+                  ? 'bg-[#0f62fe] text-white shadow-sm'
+                  : 'text-[#4e5d78] hover:text-slate-800'
+              }`}
+            >
+              {cat === 'STABILITÉ' ? 'Stabilité' : cat === 'BIEN-ÊTRE' ? 'Bien-être' : 'Activités'}
+            </button>
+          );
+        })}
       </div>
 
-      {/* 📚 EXPOSÉ UNIQUE DE LA CATÉGORIE EN SENS VERTICAL (Séparé "à part") */}
-      <div className="space-y-6">
+      {/* 📚 EXPOSÉ UNIQUE DE LA CATÉGORIE EN SENS VERTICAL */}
+      <div className="space-y-4">
         {(() => {
           const catId = activeCategory;
           const catDetails = getCategoryDetails(catId);
           const catProducts = products.filter((p) => p.category === catId && p.active);
-          const lockedCategory = isCategoryLocked(catId);
 
           return (
-            <div
-              id={`section-cat-${catId}`}
-              className="space-y-4 animate-fade-in"
-            >
-              {/* Lock Alert Box */}
-              {lockedCategory && (
-                <div id="stability-lock-alert" className="bg-rose-50/70 border border-rose-200 rounded-3xl p-5 flex items-start gap-3.5 shadow-2xs">
-                  <div className="p-2 bg-rose-100 text-rose-600 rounded-2xl shrink-0">
-                    <Lock className="w-5 h-5 animate-bounce" />
-                  </div>
-                  <div>
-                    <h4 className="text-xs font-sans font-black text-rose-900 uppercase tracking-widest">
-                      🔒 Accès verrouillé
-                    </h4>
-                    <p className="text-xs font-sans font-medium text-rose-700 leading-relaxed mt-1">
-                      Vous devez obligatoirement activer un produit de la catégorie Stabilité avant d'accéder aux produits Bien-être et Activités.
-                    </p>
-                  </div>
-                </div>
-              )}
-
-              {/* Category Info Frame Block */}
-              <div className="bg-white border border-slate-205 rounded-3xl p-5 shadow-2xs space-y-2">
-                <h3 className="font-display font-black text-slate-800 text-sm tracking-tight uppercase flex items-center gap-1">
+            <div id={`section-cat-${catId}`} className="space-y-4 animate-fade-in">
+              
+              {/* Category Info Banner */}
+              <div className="bg-slate-50 border border-slate-200/60 rounded-2xl p-4 space-y-1">
+                <h3 className="font-sans font-black text-[#2a324b] text-xs uppercase tracking-wide">
                   {catDetails.title}
                 </h3>
-                <p className="font-sans text-xs text-slate-500 leading-relaxed">
+                <p className="font-sans text-[10px] text-slate-400 font-semibold leading-relaxed">
                   {catDetails.desc}
                 </p>
-                <div className={`text-[10px] py-1.5 px-3 rounded-xl font-sans font-bold border ${catDetails.bgHeader}`}>
-                  {catDetails.badge}
+                <div className="text-[9px] text-[#0f62fe] font-sans font-bold uppercase tracking-wider pt-1">
+                  💡 {catDetails.badge}
                 </div>
               </div>
 
-              {/* Products List inside Category (VERTIQUEMENT - 1 seul produit par ligne) */}
+              {/* Products List inside Category (horizontal cards with images left, stats right) */}
               <div className="space-y-4">
                 {catProducts.length === 0 ? (
                   <div className="text-center py-10 bg-white rounded-3xl border border-slate-100 text-slate-400">
-                    <p className="text-xs font-sans">Aucun produit actif disponible dans la catégorie {catId} actuellement.</p>
+                    <p className="text-xs font-sans">Aucun produit actif disponible actuellement.</p>
                   </div>
                 ) : (
-                  catProducts.map((prod) => (
-                    <div
-                      id={`product-card-${prod.id}`}
-                      key={prod.id}
-                      className="bg-white border rounded-3xl overflow-hidden shadow-2xs transition-all duration-300 flex flex-col md:flex-row md:items-stretch border-slate-200/80 hover:border-emerald-500 hover:shadow-xs"
-                    >
-                      {/* Product Visual Area Header (left side on desktop, top on mobile) */}
-                      <div className={`relative h-32 md:h-auto md:w-56 bg-gradient-to-br ${getCoverGradient(prod.id, prod.category)} flex flex-col justify-end p-4 text-white overflow-hidden shrink-0`}>
-                        <div className="absolute top-[-20%] right-[-10%] w-32 h-32 bg-white/10 rounded-full blur-xl pointer-events-none" />
-                        <div className="absolute bottom-2 right-4 p-2 bg-white/20 backdrop-blur-md rounded-2xl border border-white/25">
-                          {renderProductIcon(prod.iconName, prod.category)}
-                        </div>
-                        
-                        {/* Category Tag */}
-                        <span className="absolute top-3 left-3 px-2.5 py-0.5 text-[8px] tracking-wider font-extrabold bg-black/35 backdrop-blur-md uppercase rounded-full">
-                          {prod.category}
-                        </span>
-                        
-                        {/* Cultivation Title */}
-                        <h4 className="font-display font-black text-white text-base tracking-tight leading-tight filter drop-shadow-md pr-12">
-                          {prod.name}
-                        </h4>
-                      </div>
+                  catProducts.map((prod) => {
+                    const isPurchased = investments.some((i) => i.productId === prod.id && i.userId === currentUser?.id && i.status === 'ACTIVE');
+                    const realImg = getProductRealImage(prod.name, prod.image);
+                    const dailyRev = Math.round(prod.totalRevenue / prod.durationDays);
 
-                      {/* Info & Action area (expanded to the right) */}
-                      <div className="flex-1 p-5 flex flex-col justify-between gap-4">
-                        <div className="space-y-3">
-                          <p className="text-xs text-slate-500 font-sans leading-relaxed">
-                            {prod.description || 'Projet d’investissement agricole de premier choix, optimisé pour un rendement maximum et un développement local durable.'}
-                          </p>
-
-                          <div className="grid grid-cols-2 gap-2 bg-slate-50 border border-slate-100 p-2 rounded-2xl">
-                            <div className="text-center border-r border-slate-200/50">
-                              <p className="text-[9px] text-slate-400 uppercase font-sans tracking-wide">Prix d'entrée</p>
-                              <p className="text-sm font-black text-slate-800 font-mono mt-0.5">
-                                {prod.price.toLocaleString()} FCFA
-                              </p>
-                            </div>
-                            <div className="text-center">
-                              <p className="text-[9px] text-slate-400 uppercase font-sans tracking-wide">Durée de cycle</p>
-                              <p className="text-sm font-black text-slate-800 font-sans mt-0.5">
-                                {prod.durationDays} Jours
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="bg-emerald-500/5 border border-emerald-500/10 p-3 rounded-2xl flex items-center justify-between text-xs font-sans">
-                            <span className="text-emerald-800 font-extrabold uppercase text-[10px]">Revenu Total Prévu</span>
-                            <strong className="text-emerald-700 text-sm font-black font-mono">
-                              {prod.totalRevenue.toLocaleString()} FCFA
-                            </strong>
-                          </div>
+                    return (
+                      <div
+                        id={`product-card-${prod.id}`}
+                        key={prod.id}
+                        className="bg-white border border-slate-200/70 rounded-3xl overflow-hidden shadow-xs hover:border-[#0f62fe] transition-all duration-200"
+                      >
+                        {/* Title bar of product card */}
+                        <div className="bg-slate-50/80 px-4.5 py-3 border-b border-slate-100 flex justify-between items-center">
+                          <h4 className="font-sans font-black text-slate-800 text-xs sm:text-sm uppercase tracking-wide">
+                            {prod.name}
+                          </h4>
+                          <span className="text-[9px] font-sans font-bold bg-[#ccd5fe] text-[#3b52d9] px-2.2 py-0.5 rounded-full select-none">
+                            {prod.category}
+                          </span>
                         </div>
 
-                        {/* Invest Footer Controls */}
-                        <div className="border-t border-slate-50 pt-3 flex flex-col gap-2 mt-auto">
-                          {prod.category !== 'STABILITÉ' && (() => {
-                            const liveTimeStr = settings?.simulatedTime && settings.simulatedTime.trim() !== ''
-                              ? settings.simulatedTime.trim()
-                              : new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
-                            const status = checkProductOpen(prod, liveTimeStr);
-                            return (
-                              <div className={`text-[10px] py-1 px-2.5 rounded-xl font-sans font-bold flex items-center justify-between border ${
-                                status.isOpen 
-                                  ? 'bg-emerald-55 border-emerald-100/50 text-emerald-800' 
-                                  : 'bg-rose-50 border-rose-100 text-rose-800'
-                              }`}>
-                                <span className="flex items-center gap-1">
-                                  <span className={`w-1.5 h-1.5 rounded-full ${status.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-rose-500'}`} />
-                                  Période de vente :
-                                </span>
-                                <span className={status.isOpen ? 'text-emerald-700' : 'text-rose-700'}>
-                                  {status.isOpen ? 'Ouvert ' + (prod.closingTime ? `(ferme à ${prod.closingTime})` : prod.availabilityDurationMinutes ? `(ferme sous ${prod.availabilityDurationMinutes} min)` : '') : status.reason}
-                                </span>
-                              </div>
-                            );
-                          })()}
+                        {/* Card body content with direct stats layout */}
+                        <div className="p-4 flex gap-4 items-start">
+                          {/* Left product image with aspect-square preview */}
+                          <div className="w-24 h-24 sm:w-28 sm:h-28 rounded-2xl overflow-hidden bg-slate-100 shrink-0 border border-slate-200/40 relative">
+                            {realImg ? (
+                              <img 
+                                src={realImg} 
+                                alt={prod.name} 
+                                className="w-full h-full object-cover"
+                                referrerPolicy="no-referrer"
+                              />
+                            ) : (
+                              <div className={`w-full h-full bg-gradient-to-br ${getCoverGradient(prod.id, prod.category)}`} />
+                            )}
+                          </div>
 
-                          <div className="flex items-center justify-between gap-1.5">
-                            <div className="text-left">
-                              <p className="text-[8px] text-slate-400 font-sans font-bold uppercase">BÉNÉFICE NET</p>
-                              <p className="text-[11px] font-black font-mono text-emerald-600 bg-emerald-50 px-1.5 py-0.5 rounded-md border border-emerald-100/30">
-                                +{(prod.totalRevenue - prod.price).toLocaleString()} FCFA
-                              </p>
+                          {/* Right product financials table list */}
+                          <div className="flex-1 space-y-1 text-slate-700">
+                            <div className="flex justify-between items-center pb-1 border-b border-dashed border-slate-100">
+                              <span className="text-[10px] font-sans font-bold text-slate-400">Prix du produit :</span>
+                              <span className="text-xs font-black font-mono text-slate-800">{prod.price.toLocaleString()} FCFA</span>
                             </div>
+                            <div className="flex justify-between items-center pb-1 border-b border-dashed border-slate-100">
+                              <span className="text-[10px] font-sans font-bold text-slate-400">Revenu quotidien :</span>
+                              <span className="text-xs font-black font-mono text-emerald-600">+{dailyRev.toLocaleString()} FCFA/Jour</span>
+                            </div>
+                            <div className="flex justify-between items-center pb-1 border-b border-dashed border-slate-100">
+                              <span className="text-[10px] font-sans font-bold text-slate-400">Revenu total :</span>
+                              <span className="text-xs font-black font-mono text-emerald-600">+{prod.totalRevenue.toLocaleString()} FCFA</span>
+                            </div>
+                            <div className="flex justify-between items-center">
+                              <span className="text-[10px] font-sans font-bold text-slate-400">Cycle de retour :</span>
+                              <span className="text-xs font-black font-sans text-slate-850">{prod.durationDays} Jours</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Bottom action bar inside product card */}
+                        <div className="px-4 pb-4.5 space-y-2">
+                          {/* Achat alert feedback bar */}
+                          {isPurchased && (
+                            <div className="text-[9px] py-1 px-3 rounded-lg font-sans font-bold bg-emerald-50 border border-emerald-100 text-emerald-850 text-center uppercase tracking-wide leading-none">
+                              ✓ Achat réussi ! Producteur actif
+                            </div>
+                          )}
+
+                          {/* Unlock rules blocker */}
+                          {isRuleActive && prod.category !== 'STABILITÉ' && !hasActiveStability && (
+                            <div className="text-[9px] py-1 px-3 rounded-lg font-sans font-extrabold bg-rose-50 border border-rose-100 text-rose-800 text-center uppercase tracking-wider animate-pulse leading-none">
+                              ⚠️ Stabilité requise pour débloquer
+                            </div>
+                          )}
+
+                          <div className="flex justify-between items-center gap-2">
+                            {/* Open and closed hour label */}
+                            {prod.category !== 'STABILITÉ' && (() => {
+                              const liveTimeStr = settings?.simulatedTime && settings.simulatedTime.trim() !== ''
+                                ? settings.simulatedTime.trim()
+                                : new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
+                              const status = checkProductOpen(prod, liveTimeStr);
+                              return (
+                                <span className="text-[9px] font-bold font-sans text-slate-400 flex items-center gap-1">
+                                  <span className={`w-1.5 h-1.5 rounded-full ${status.isOpen ? 'bg-emerald-500 animate-pulse' : 'bg-rose-450'}`} />
+                                  {status.isOpen ? 'Disponible' : 'Indisponible'}
+                                </span>
+                              );
+                            })()}
+
                             <button
                               id={`btn-invest-prod-${prod.id}`}
                               onClick={() => handleInvestClick(prod)}
-                              className={`py-2 px-6 select-none shrink-0 font-sans font-extrabold text-xs rounded-xl flex items-center justify-center transition-all shadow-xs text-white cursor-pointer ${
-                                prod.category === 'STABILITÉ'
-                                  ? 'bg-emerald-600 hover:bg-emerald-700'
-                                  : prod.category === 'BIEN-ÊTRE'
-                                  ? 'bg-rose-600 hover:bg-rose-700'
-                                  : 'bg-amber-600 hover:bg-amber-700'
+                              disabled={isRuleActive && prod.category !== 'STABILITÉ' && !hasActiveStability}
+                              className={`ml-auto px-6 py-2 rounded-3xl text-xs font-sans font-black uppercase tracking-wider select-none shrink-0 transition-colors shadow-xs ${
+                                isRuleActive && prod.category !== 'STABILITÉ' && !hasActiveStability
+                                  ? 'bg-slate-200 text-slate-400 cursor-not-allowed'
+                                  : 'bg-[#9c2b2b] hover:bg-[#b03030] text-white cursor-pointer'
                               }`}
                             >
-                              Investir
+                              Acheter
                             </button>
                           </div>
                         </div>
+
                       </div>
-                    </div>
-                  ))
+                    );
+                  })
                 )}
               </div>
             </div>

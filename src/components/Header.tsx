@@ -60,18 +60,12 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* RIGHT ACTIONS */}
         <div className="flex items-center gap-1.5">
-          {/* Admin Switch Override (A key request. To test everything instantly!) */}
-          {currentUser && (
+          {/* Admin Switch Override */}
+          {currentUser && currentUser.role === 'admin' && (
             <button
               id="admin-override-toggle"
               onClick={() => {
-                if (currentUser.role === 'admin') {
-                  setIsAdminView(!isAdminView);
-                } else {
-                  // If developer is accessing, let them trigger admin to evaluate full feature set
-                  // Promote current user to admin role, or enable simulation for testing
-                  setIsAdminView(!isAdminView);
-                }
+                setIsAdminView(!isAdminView);
               }}
               className={`p-1.5 rounded-xl text-xs font-semibold flex items-center gap-1 ${
                 isAdminView

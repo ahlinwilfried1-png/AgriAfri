@@ -12,6 +12,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     active: true,
     iconName: 'Sprout',
     description: 'Investissement clé en main dans une plantation moderne de cacao résistant et à haut rendement. La récolte et commercialisation sont entièrement prises en charge.',
+    image: '/src/assets/images/cacao_ivory_coast_1781087425613.png',
   },
   {
     id: 'p-stab-2',
@@ -23,6 +24,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     active: true,
     iconName: 'TreeDeciduous',
     description: 'Participez à la production de noix d\'anacarde d\'excellence destinées à l\'exportation haut de gamme. Un projet stable aux retours assurés.',
+    image: '/src/assets/images/anacarde_orchard_1781087442993.png',
   },
   {
     id: 'p-stab-3',
@@ -34,6 +36,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     active: true,
     iconName: 'Droplet',
     description: 'Soutenez l\'un des secteurs agricoles les plus sûrs et lucratifs du continent. Permet le financement des intrants et l\'équipement de récolte automatique du latex.',
+    image: 'https://images.unsplash.com/photo-1599599810769-bcde5a160d32?auto=format&fit=crop&q=80&w=600',
   },
 
   // ❤️ BIEN-ÊTRE
@@ -47,6 +50,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     active: true,
     iconName: 'Leaf',
     description: 'Financement ultra-rapide des intrants pour la culture de tomates hors-sol à haut rendement de proximité. Idéal pour tester la plateforme.',
+    image: 'https://images.unsplash.com/photo-1592924357228-91a4daadcfea?auto=format&fit=crop&q=80&w=600',
   },
   {
     id: 'p-bien-2',
@@ -58,6 +62,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     active: true,
     iconName: 'Egg',
     description: 'Soutien aux infrastructures avicoles locales à croissance accélérée. Vente directe sur les marchés urbains à l\'expiration du cycle.',
+    image: '/src/assets/images/poultry_breeding_1781087460448.png',
   },
   {
     id: 'p-bien-3',
@@ -69,6 +74,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     active: true,
     iconName: 'Apple',
     description: 'Financement de la chaîne logistique locale pour la récolte et la livraison de bananes plantains biologiques de qualité.',
+    image: 'https://images.unsplash.com/photo-1564349683136-77e08dba1ef7?auto=format&fit=crop&q=80&w=600',
   },
   {
     id: 'p-bien-4',
@@ -80,6 +86,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     active: true,
     iconName: 'Waves',
     description: 'Projet d\'optimisation de l\'irrigation de la coopérative rizicole de riz local de premier choix. Cycle d\'un mois rémunérateur.',
+    image: 'https://images.unsplash.com/photo-1536256263959-770b48d82b0a?auto=format&fit=crop&q=80&w=600',
   },
 
   // 🚜 ACTIVITÉS
@@ -93,6 +100,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     active: true,
     iconName: 'Settings',
     description: 'Service de mécanisation express loué aux petits producteurs locaux lors de la préparation des sols. Sécurisé, rapide et ultra-fiable.',
+    image: 'https://images.unsplash.com/photo-1500937386664-56d1dfef3854?auto=format&fit=crop&q=80&w=600',
   },
   {
     id: 'p-act-2',
@@ -104,6 +112,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     active: true,
     iconName: 'Home',
     description: 'Financement partiel de serres contrôlées par capteurs connectés pour garantir des rendements horticoles robustes face aux changements thermiques.',
+    image: 'https://images.unsplash.com/photo-1585320806297-9794b3e4eeae?auto=format&fit=crop&q=80&w=600',
   },
   {
     id: 'p-act-3',
@@ -115,6 +124,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     active: true,
     iconName: 'Database',
     description: 'Entrepôt moderne de séchage et de conservation du maïs. Permet de stocker et stabiliser les prix face aux fluctuations saisonnières.',
+    image: 'https://images.unsplash.com/photo-1574323347407-f5e1ad6d020b?auto=format&fit=crop&q=80&w=600',
   },
   {
     id: 'p-act-4',
@@ -126,6 +136,7 @@ export const INITIAL_PRODUCTS: Product[] = [
     active: true,
     iconName: 'Sun',
     description: 'Déploiement de pompes à eau photovoltaïques écologiques autonomes pour irriger jusqu\'à 5 hectares de cultures intensives en continu.',
+    image: '/src/assets/images/solar_forage_1781087475485.png',
   },
 ];
 

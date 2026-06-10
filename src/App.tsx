@@ -11,6 +11,7 @@ import { HomeView } from './components/HomeView';
 import { ProductsView } from './components/ProductsView';
 import { ReviewsView } from './components/ReviewsView';
 import { ProfileView } from './components/ProfileView';
+import { RoueView } from './components/RoueView';
 import { AdminPanel } from './components/AdminPanel';
 import { AuthScreens } from './components/AuthScreens';
 import { OtpBanner } from './components/OtpBanner';
@@ -56,7 +57,7 @@ function AppContent() {
         <main className="flex-1 overflow-y-auto px-4 pt-5 pb-20 scrollbar-none">
           
           {/* If Admin view is toggled, override client tabs */}
-          {isAdminView ? (
+          {isAdminView && currentUser.role === 'admin' ? (
             <div className="animate-fade-in space-y-4">
               {/* Back to client button indicator */}
               <button
@@ -74,7 +75,8 @@ function AppContent() {
             <>
               {activeTab === 'accueil' && <HomeView setActiveTab={setActiveTab} />}
               {activeTab === 'produits' && <ProductsView />}
-              {activeTab === 'avis' && <ReviewsView />}
+              {activeTab === 'roue' && <RoueView />}
+              {activeTab === 'forum' && <ReviewsView />}
               {activeTab === 'moi' && <ProfileView />}
             </>
           )}
