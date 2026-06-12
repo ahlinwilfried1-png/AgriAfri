@@ -186,7 +186,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ isAdminView, setIsAdmi
   };
 
   const handleCopyLink = () => {
-    const inviteLink = `${window.location.origin}/register?ref=${currentUser.referralCode}`;
+    const inviteLink = `${window.location.origin}/?ref=${currentUser.referralCode}`;
     navigator.clipboard.writeText(inviteLink);
     setLinkCopied(true);
     setTimeout(() => {
@@ -512,7 +512,7 @@ export const ProfileView: React.FC<ProfileViewProps> = ({ isAdminView, setIsAdmi
         {/* Emerald card: Avis & Témoignages */}
         <button
           onClick={() => {
-            const tabAvis = document.getElementById('nav-tab-forum');
+            const tabAvis = document.getElementById('nav-tab-avis');
             if (tabAvis) {
               tabAvis.click();
             }

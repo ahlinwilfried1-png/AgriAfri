@@ -62,7 +62,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveTab }) => {
 
   const handleCopyLink = () => {
     if (!currentUser) return;
-    const inviteLink = `${window.location.origin}/register?ref=${currentUser.referralCode}`;
+    const inviteLink = `${window.location.origin}/?ref=${currentUser.referralCode}`;
     navigator.clipboard.writeText(inviteLink);
     setLinkCopied(true);
     setTimeout(() => {
@@ -78,7 +78,7 @@ export const HomeView: React.FC<HomeViewProps> = ({ setActiveTab }) => {
 
   const handleShareLink = () => {
     if (!currentUser) return;
-    const inviteLink = `${window.location.origin}/register?ref=${currentUser.referralCode}`;
+    const inviteLink = `${window.location.origin}/?ref=${currentUser.referralCode}`;
     if (navigator.share) {
       navigator.share({
         title: 'AgriAfri Parrainage',

@@ -113,6 +113,26 @@ export interface Review {
   imageUrl?: string;
 }
 
+export interface ForumPost {
+  id: string;
+  authorName: string;
+  authorAvatar: string;
+  role: 'user' | 'admin';
+  content: string;
+  imageUrl?: string;
+  date: string;
+  likes: number;
+  likedBy: string[]; // User IDs who liked the post
+  comments: {
+    id: string;
+    authorName: string;
+    authorAvatar: string;
+    content: string;
+    date: string;
+    role: 'user' | 'admin';
+  }[];
+}
+
 export interface Notification {
   id: string;
   userId: string; // "all" or specific userId

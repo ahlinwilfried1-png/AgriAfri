@@ -6,8 +6,8 @@ declare global {
   }
 }
 
-const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string) || '';
-const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || '';
+const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string) || 'https://tvjutkkpvkdhlphqvdbt.supabase.co';
+const supabaseAnonKey = (import.meta.env.VITE_SUPABASE_ANON_KEY as string) || 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InR2anV0a2twdmtkaGxwaHF2ZGJ0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODExNjMyOTgsImV4cCI6MjA5NjczOTI5OH0.u4mGN1NQAj2427FJfp7OnDAnbYwpnC7_KdEP_wYNlRI';
 
 export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
 

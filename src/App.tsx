@@ -10,6 +10,7 @@ import { BottomNav } from './components/BottomNav';
 import { HomeView } from './components/HomeView';
 import { ProductsView } from './components/ProductsView';
 import { ReviewsView } from './components/ReviewsView';
+import { ForumView } from './components/ForumView';
 import { ProfileView } from './components/ProfileView';
 import { AdminPanel } from './components/AdminPanel';
 import { AuthScreens } from './components/AuthScreens';
@@ -165,7 +166,8 @@ function AppContent() {
             <>
               {activeTab === 'accueil' && <HomeView setActiveTab={setActiveTab} />}
               {activeTab === 'produits' && <ProductsView setActiveTab={setActiveTab} />}
-              {activeTab === 'forum' && <ReviewsView />}
+              {activeTab === 'avis' && <ReviewsView />}
+              {activeTab === 'forum' && <ForumView />}
               {activeTab === 'moi' && (
                 <ProfileView 
                   isAdminView={isAdminView} 

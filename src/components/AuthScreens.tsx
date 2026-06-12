@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Lock, Phone, User, Landmark, ShieldCheck, ArrowRight, Eye, EyeOff, Sparkles, ChevronDown, Link, Check } from 'lucide-react';
 
@@ -37,6 +37,20 @@ export const AuthScreens: React.FC<AuthScreensProps> = ({ onSuccess }) => {
   const [regPassword, setRegPassword] = useState('');
   const [regConfirmPassword, setRegConfirmPassword] = useState('');
   const [regInviteCode, setRegInviteCode] = useState('');
+
+  // Auto-fill invite code from URL parameters (?ref=XXXXX) on mount
+  useEffect(() => {
+    try {
+      const params = new URLSearchParams(window.location.search);
+      const refCode = params.get('ref');
+      if (refCode) {
+        setRegInviteCode(refCode.toUpperCase().trim());
+        setIsLoginView(false); // Make sure registration view is open to fill it in
+      }
+    } catch (e) {
+      console.error('Failed to parse referral code from URL:', e);
+    }
+  }, []);
   
   // Custom states for verification OTP simulation
   const [otpSent, setOtpSent] = useState(false);

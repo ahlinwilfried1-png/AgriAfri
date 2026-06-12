@@ -17,6 +17,7 @@ import {
   AppSettings,
   ProductCategory,
   checkProductOpen,
+  ForumPost,
 } from '../types';
 import { INITIAL_PRODUCTS, INITIAL_REVIEWS, DEFAULT_SETTINGS } from '../data/initialData';
 import { safeSyncToSupabase, safeDeleteFromSupabase, supabase } from '../lib/supabase';
@@ -30,6 +31,7 @@ interface AppContextType {
   withdrawals: Withdrawal[];
   tickets: SupportTicket[];
   reviews: Review[];
+  forumPosts: ForumPost[];
   notifications: Notification[];
   commissions: ReferralCommission[];
   settings: AppSettings;
@@ -70,6 +72,12 @@ interface AppContextType {
   updateReview: (id: string, rating: number, comment: string) => void;
   deleteReview: (id: string) => void;
 
+  // Forum CRUD & Interactions
+  addForumPost: (content: string, imageUrl?: string) => void;
+  likeForumPost: (postId: string) => void;
+  addForumComment: (postId: string, content: string) => void;
+  deleteForumPost: (postId: string) => void;
+
   // Products CRUD (Admin)
   addProduct: (product: Omit<Product, 'id'>) => void;
   updateProduct: (id: string, product: Partial<Product>) => void;
@@ -102,6 +110,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const [withdrawals, setWithdrawals] = useState<Withdrawal[]>([]);
   const [tickets, setTickets] = useState<SupportTicket[]>([]);
   const [reviews, setReviews] = useState<Review[]>([]);
+  const [forumPosts, setForumPosts] = useState<ForumPost[]>([]);
   const [notifications, setNotifications] = useState<Notification[]>([]);
   const [commissions, setCommissions] = useState<ReferralCommission[]>([]);
   const [settings, setSettings] = useState<AppSettings>(DEFAULT_SETTINGS);
@@ -195,6 +204,59 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     } else {
       setReviews(INITIAL_REVIEWS);
       localStorage.setItem('agri_reviews', JSON.stringify(INITIAL_REVIEWS));
+    }
+
+    // Forum Posts
+    const localForum = localStorage.getItem('agri_forum_posts');
+    if (localForum) {
+      setForumPosts(JSON.parse(localForum));
+    } else {
+      const INITIAL_FORUM_POSTS: ForumPost[] = [
+        {
+          id: "fp-1",
+          authorName: "Directeur AgriAfri d'Afrique",
+          authorAvatar: "👑",
+          role: "admin",
+          content: "Bienvenue sur le forum officiel de la communauté AgriAfri ! 🎉 Ici, partagez vos doutes, vos rendements de contrats, posez vos questions et célébrez vos retraits réussis. Développons l'Afrique de l'Ouest ensemble par l'agritech durable ! 🌍🌱",
+          date: "11 Juin 2026, 08:30",
+          likes: 42,
+          likedBy: [],
+          comments: [
+            {
+              id: "fc-1-1",
+              authorName: "Koffi Paul Yao",
+              authorAvatar: "👨‍🌾",
+              content: "Merci beaucoup Directeur ! C'est vraiment la meilleure plateforme.",
+              date: "11 Juin 2026, 08:45",
+              role: "user"
+            }
+          ]
+        },
+        {
+          id: "fp-2",
+          authorName: "Awa Touré",
+          authorAvatar: "👩‍🌾",
+          role: "user",
+          content: "Bonjour tout le monde ! Retrait de 40 000 FCFA reçu ce matin par Moov Money en moins de 2 heures ! Merci beaucoup pour le sérieux, AgriAfri est formidable ! 🔥💰",
+          date: "11 Juin 2026, 09:12",
+          likes: 18,
+          likedBy: [],
+          comments: []
+        },
+        {
+          id: "fp-3",
+          authorName: "Mamadou Diallo",
+          authorAvatar: "👨‍🌾",
+          role: "user",
+          content: "Moi j'ai activé le contrat Érable à 50 000 FCFA hier. J'ai déjà reçu mon rendement quotidien automatique de 4 500 FCFA ce matin. Tout fonctionne à merveille !",
+          date: "10 Juin 2026, 17:05",
+          likes: 25,
+          likedBy: [],
+          comments: []
+        }
+      ];
+      setForumPosts(INITIAL_FORUM_POSTS);
+      localStorage.setItem('agri_forum_posts', JSON.stringify(INITIAL_FORUM_POSTS));
     }
 
     // Settings
@@ -308,43 +370,222 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     // Initial Fetch Synchronization
     const fetchInitialLogs = async () => {
       try {
-        const { data: remoteT, error: errT } = await supabase.from('tickets').select('*');
-        if (!errT && remoteT) {
-          setTickets((prev) => {
-            const merged = [...prev];
-            remoteT.forEach((rt: any) => {
-              const idx = merged.findIndex((t) => t.id === rt.id);
-              if (idx === -1) {
-                merged.push(rt as SupportTicket);
-              } else {
-                merged[idx] = rt as SupportTicket;
-              }
-            });
-            merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-            localStorage.setItem('agri_tickets', JSON.stringify(merged));
-            return merged;
-          });
+        // --- 1. SETTINGS SYNC ---
+        try {
+          const { data: remoteS, error: errS } = await supabase.from('settings').select('*');
+          if (!errS && remoteS && remoteS.length > 0) {
+            const s = remoteS[0];
+            const parsedSettings: AppSettings = {
+              whatsappLink: s.whatsappLink,
+              telegramLink: s.telegramLink,
+              withdrawStartHour: Number(s.withdrawStartHour),
+              withdrawEndHour: Number(s.withdrawEndHour),
+              minWithdrawAmount: Number(s.minWithdrawAmount),
+              commissionLevel1: Number(s.commissionLevel1),
+              commissionLevel2: Number(s.commissionLevel2),
+              commissionLevel3: Number(s.commissionLevel3),
+              homeWelcomeTitle: s.homeWelcomeTitle,
+              homeWelcomeDesc: s.homeWelcomeDesc,
+              requireStabilityToUnlockOthers: s.requireStabilityToUnlockOthers,
+              operatorPhones: typeof s.operatorPhones === 'string' ? JSON.parse(s.operatorPhones) : s.operatorPhones,
+              simulatedTime: s.simulatedTime || undefined,
+            };
+            setSettings(parsedSettings);
+            localStorage.setItem('agri_settings', JSON.stringify(parsedSettings));
+          }
+        } catch (sErr) {
+          console.warn('[SupabaseSync] Settings fetch ignored:', sErr);
         }
 
-        const { data: remoteD, error: errD } = await supabase.from('deposits').select('*');
-        if (!errD && remoteD) {
-          setDeposits((prev) => {
-            const merged = [...prev];
-            remoteD.forEach((rd: any) => {
-              const idx = merged.findIndex((d) => d.id === rd.id);
-              if (idx === -1) {
-                merged.push(rd as Deposit);
-              } else {
-                merged[idx] = rd as Deposit;
+        // --- 2. PRODUCTS SYNC ---
+        try {
+          const { data: remoteP, error: errP } = await supabase.from('products').select('*');
+          if (!errP && remoteP && remoteP.length > 0) {
+            const formattedProducts: Product[] = remoteP.map((rp: any) => ({
+              id: rp.id,
+              name: rp.name,
+              category: rp.category,
+              price: Number(rp.price),
+              durationDays: Number(rp.durationDays),
+              totalRevenue: Number(rp.totalRevenue),
+              active: rp.active,
+              iconName: rp.iconName,
+              description: rp.description || undefined,
+              image: rp.image || undefined,
+              openingTime: rp.openingTime || undefined,
+              closingTime: rp.closingTime || undefined,
+              availabilityDurationMinutes: rp.availabilityDurationMinutes ? Number(rp.availabilityDurationMinutes) : undefined,
+              manualOpened: rp.manualOpened,
+              manualClosed: rp.manualClosed,
+            }));
+            setProducts(formattedProducts);
+            localStorage.setItem('agri_products', JSON.stringify(formattedProducts));
+          }
+        } catch (pErr) {
+          console.warn('[SupabaseSync] Products fetch ignored:', pErr);
+        }
+
+        // --- 3. USERS SYNC ---
+        try {
+          const { data: remoteU, error: errU } = await supabase.from('users').select('*');
+          if (!errU && remoteU && remoteU.length > 0) {
+            const formattedUsers: User[] = remoteU.map((ru: any) => ({
+              id: ru.id,
+              fullName: ru.fullName,
+              phone: ru.phone,
+              countryCode: ru.countryCode,
+              balance: Number(ru.balance),
+              totalEarnings: Number(ru.totalEarnings),
+              totalReferralGains: Number(ru.totalReferralGains),
+              referralCode: ru.referralCode,
+              referredBy: ru.referredBy || undefined,
+              signupDate: ru.signupDate,
+              blocked: ru.blocked,
+              role: ru.role as 'user' | 'admin',
+              freeSpins: ru.freeSpins ? Number(ru.freeSpins) : 0,
+              email: ru.email || undefined,
+              password: ru.password || undefined,
+            }));
+            setUsers(formattedUsers);
+            localStorage.setItem('agri_users', JSON.stringify(formattedUsers));
+
+            // Sync currently logged in user context
+            const sessionUser = sessionStorage.getItem('agri_session_user');
+            if (sessionUser) {
+              const currentSUser = JSON.parse(sessionUser);
+              const foundUser = formattedUsers.find((u) => u.id === currentSUser.id);
+              if (foundUser) {
+                setCurrentUser(foundUser);
+                sessionStorage.setItem('agri_session_user', JSON.stringify(foundUser));
               }
-            });
-            merged.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-            localStorage.setItem('agri_deposits', JSON.stringify(merged));
-            return merged;
-          });
+            }
+          }
+        } catch (uErr) {
+          console.warn('[SupabaseSync] Users fetch ignored:', uErr);
+        }
+
+        // --- 4. INVESTMENTS SYNC ---
+        try {
+          const { data: remoteI, error: errI } = await supabase.from('investments').select('*');
+          if (!errI && remoteI) {
+            const formattedI: Investment[] = remoteI.map((ri: any) => ({
+              id: ri.id,
+              userId: ri.userId,
+              productId: ri.productId,
+              productName: ri.productName,
+              category: ri.category as ProductCategory,
+              amount: Number(ri.amount),
+              totalYield: Number(ri.totalYield),
+              durationDays: Number(ri.durationDays),
+              daysPassed: Number(ri.daysPassed),
+              purchaseDate: ri.purchaseDate,
+              endDate: ri.endDate,
+              status: ri.status as 'ACTIVE' | 'COMPLETED',
+            }));
+            setInvestments(formattedI);
+            localStorage.setItem('agri_investments', JSON.stringify(formattedI));
+          }
+        } catch (iErr) {
+          console.warn('[SupabaseSync] Investments fetch ignored:', iErr);
+        }
+
+        // --- 5. WITHDRAWALS SYNC ---
+        try {
+          const { data: remoteW, error: errW } = await supabase.from('withdrawals').select('*');
+          if (!errW && remoteW) {
+            const formattedW: Withdrawal[] = remoteW.map((rw: any) => ({
+              id: rw.id,
+              userId: rw.userId,
+              userPhone: rw.userPhone,
+              amount: Number(rw.amount),
+              recipientPhone: rw.recipientPhone,
+              recipientName: rw.recipientName,
+              date: rw.date,
+              status: rw.status as 'PENDING' | 'PAID' | 'REFUSED',
+            }));
+            setWithdrawals(formattedW);
+            localStorage.setItem('agri_withdrawals', JSON.stringify(formattedW));
+          }
+        } catch (wErr) {
+          console.warn('[SupabaseSync] Withdrawals fetch ignored:', wErr);
+        }
+
+        // --- 6. COMMISSIONS SYNC ---
+        try {
+          const { data: remoteC, error: errC } = await supabase.from('commissions').select('*');
+          if (!errC && remoteC) {
+            const formattedC: ReferralCommission[] = remoteC.map((rc: any) => ({
+              id: rc.id,
+              referrerId: rc.referrerId,
+              referredId: rc.referredId,
+              referredName: rc.referredName,
+              level: Number(rc.level),
+              amount: Number(rc.amount),
+              date: rc.date,
+            }));
+            setCommissions(formattedC);
+            localStorage.setItem('agri_commissions', JSON.stringify(formattedC));
+          }
+        } catch (cErr) {
+          console.warn('[SupabaseSync] Commissions fetch ignored:', cErr);
+        }
+
+        // --- 7. TICKETS SYNC ---
+        try {
+          const { data: remoteT, error: errT } = await supabase.from('tickets').select('*');
+          if (!errT && remoteT) {
+            setTickets(remoteT);
+            localStorage.setItem('agri_tickets', JSON.stringify(remoteT));
+          }
+        } catch (tErr) {
+          console.warn('[SupabaseSync] Tickets fetch ignored:', tErr);
+        }
+
+        // --- 8. DEPOSITS SYNC ---
+        try {
+          const { data: remoteD, error: errD } = await supabase.from('deposits').select('*');
+          if (!errD && remoteD) {
+            setDeposits(remoteD);
+            localStorage.setItem('agri_deposits', JSON.stringify(remoteD));
+          }
+        } catch (dErr) {
+          console.warn('[SupabaseSync] Deposits fetch ignored:', dErr);
+        }
+
+        // --- 9. REVIEWS SYNC ---
+        try {
+          const { data: remoteR, error: errR } = await supabase.from('reviews').select('*');
+          if (!errR && remoteR) {
+            setReviews(remoteR);
+            localStorage.setItem('agri_reviews', JSON.stringify(remoteR));
+          }
+        } catch (rErr) {
+          console.warn('[SupabaseSync] Reviews fetch ignored:', rErr);
+        }
+
+        // --- 10. FORUM POSTS SYNC ---
+        try {
+          const { data: remoteFP, error: errFP } = await supabase.from('forum_posts').select('*');
+          if (!errFP && remoteFP) {
+            setForumPosts(remoteFP);
+            localStorage.setItem('agri_forum_posts', JSON.stringify(remoteFP));
+          }
+        } catch (fpErr) {
+          console.warn('[SupabaseSync] Forum posts fetch ignored:', fpErr);
+        }
+
+        // --- 11. NOTIFICATIONS SYNC ---
+        try {
+          const { data: remoteN, error: errN } = await supabase.from('notifications').select('*');
+          if (!errN && remoteN) {
+            setNotifications(remoteN);
+            localStorage.setItem('agri_notifications', JSON.stringify(remoteN));
+          }
+        } catch (nErr) {
+          console.warn('[SupabaseSync] Notifications fetch ignored:', nErr);
         }
       } catch (e) {
-        console.warn('[SupabaseSync] Initial fetch failed:', e);
+        console.warn('[SupabaseSync] Initial global sync fetch failed:', e);
       }
     };
 
@@ -393,11 +634,44 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveProducts = (newProds: Product[]) => {
     setProducts(newProds);
     localStorage.setItem('agri_products', JSON.stringify(newProds));
+    newProds.forEach((prod) => {
+      safeSyncToSupabase('products', prod.id, {
+        name: prod.name,
+        category: prod.category,
+        price: prod.price,
+        durationDays: prod.durationDays,
+        totalRevenue: prod.totalRevenue,
+        active: prod.active,
+        iconName: prod.iconName,
+        description: prod.description || null,
+        image: prod.image || null,
+        openingTime: prod.openingTime || null,
+        closingTime: prod.closingTime || null,
+        availabilityDurationMinutes: prod.availabilityDurationMinutes || null,
+        manualClosed: prod.manualClosed || false,
+        manualOpened: prod.manualOpened || false,
+      });
+    });
   };
 
   const saveInvestments = (newInvest: Investment[]) => {
     setInvestments(newInvest);
     localStorage.setItem('agri_investments', JSON.stringify(newInvest));
+    newInvest.forEach((inv) => {
+      safeSyncToSupabase('investments', inv.id, {
+        userId: inv.userId,
+        productId: inv.productId,
+        productName: inv.productName,
+        category: inv.category,
+        amount: inv.amount,
+        totalYield: inv.totalYield,
+        durationDays: inv.durationDays,
+        daysPassed: inv.daysPassed,
+        purchaseDate: inv.purchaseDate,
+        endDate: inv.endDate,
+        status: inv.status,
+      });
+    });
   };
 
   const saveDeposits = (newDep: Deposit[]) => {
@@ -421,6 +695,17 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveWithdrawals = (newWith: Withdrawal[]) => {
     setWithdrawals(newWith);
     localStorage.setItem('agri_withdrawals', JSON.stringify(newWith));
+    newWith.forEach((withdr) => {
+      safeSyncToSupabase('withdrawals', withdr.id, {
+        userId: withdr.userId,
+        userPhone: withdr.userPhone,
+        amount: withdr.amount,
+        recipientPhone: withdr.recipientPhone,
+        recipientName: withdr.recipientName,
+        date: withdr.date,
+        status: withdr.status,
+      });
+    });
   };
 
   const saveTickets = (newTick: SupportTicket[]) => {
@@ -447,21 +732,84 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
   const saveReviews = (newRev: Review[]) => {
     setReviews(newRev);
     localStorage.setItem('agri_reviews', JSON.stringify(newRev));
+    newRev.forEach((rev) => {
+      safeSyncToSupabase('reviews', rev.id, {
+        authorName: rev.authorName,
+        authorAvatar: rev.authorAvatar,
+        rating: rev.rating,
+        comment: rev.comment,
+        date: rev.date,
+        isVerified: rev.isVerified,
+        imageUrl: rev.imageUrl || null,
+      });
+    });
+  };
+
+  const saveForumPosts = (newPosts: ForumPost[]) => {
+    setForumPosts(newPosts);
+    localStorage.setItem('agri_forum_posts', JSON.stringify(newPosts));
+    newPosts.forEach((post) => {
+      safeSyncToSupabase('forum_posts', post.id, {
+        authorName: post.authorName,
+        authorAvatar: post.authorAvatar,
+        role: post.role,
+        content: post.content,
+        imageUrl: post.imageUrl || null,
+        date: post.date,
+        likes: post.likes,
+        likedBy: post.likedBy || [],
+        comments: post.comments || [],
+      });
+    });
   };
 
   const saveNotifications = (newNotif: Notification[]) => {
     setNotifications(newNotif);
     localStorage.setItem('agri_notifications', JSON.stringify(newNotif));
+    newNotif.forEach((not) => {
+      safeSyncToSupabase('notifications', not.id, {
+        userId: not.userId,
+        title: not.title,
+        message: not.message,
+        date: not.date,
+        read: not.read,
+      });
+    });
   };
 
   const saveCommissions = (newCom: ReferralCommission[]) => {
     setCommissions(newCom);
     localStorage.setItem('agri_commissions', JSON.stringify(newCom));
+    newCom.forEach((com) => {
+      safeSyncToSupabase('commissions', com.id, {
+        referrerId: com.referrerId,
+        referredId: com.referredId,
+        referredName: com.referredName,
+        level: com.level,
+        amount: com.amount,
+        date: com.date,
+      });
+    });
   };
 
   const saveSettings = (newSet: AppSettings) => {
     setSettings(newSet);
     localStorage.setItem('agri_settings', JSON.stringify(newSet));
+    safeSyncToSupabase('settings', 'global_config', {
+      whatsappLink: newSet.whatsappLink,
+      telegramLink: newSet.telegramLink,
+      withdrawStartHour: newSet.withdrawStartHour,
+      withdrawEndHour: newSet.withdrawEndHour,
+      minWithdrawAmount: newSet.minWithdrawAmount,
+      commissionLevel1: newSet.commissionLevel1,
+      commissionLevel2: newSet.commissionLevel2,
+      commissionLevel3: newSet.commissionLevel3,
+      homeWelcomeTitle: newSet.homeWelcomeTitle,
+      homeWelcomeDesc: newSet.homeWelcomeDesc,
+      requireStabilityToUnlockOthers: newSet.requireStabilityToUnlockOthers,
+      operatorPhones: newSet.operatorPhones,
+      simulatedTime: newSet.simulatedTime || null,
+    });
   };
 
   // --- ACTIONS ---
@@ -700,10 +1048,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     let curReferrerCode = currentUser.referredBy;
     let tempCommissions = [...commissions];
     let finalUsers = [...updatedUsers];
+    let tempNotifications = [...notifications];
 
     if (curReferrerCode) {
       // Find level 1 parent
-      let l1 = finalUsers.find((u) => u.referralCode === curReferrerCode);
+      let l1 = finalUsers.find((u) => u.referralCode.toUpperCase() === curReferrerCode!.toUpperCase());
       if (l1) {
         // Ami a payé son produit : on offre un tour de roue gratuit au parrain
         l1.freeSpins = (l1.freeSpins || 0) + 1;
@@ -729,11 +1078,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
           date: new Date().toISOString(),
           read: false,
         };
-        saveNotifications([newNotif, ...notifications]);
+        tempNotifications = [newNotif, ...tempNotifications];
 
         // Proceed to level 2 parent
         if (l1.referredBy) {
-          let l2 = finalUsers.find((u) => u.referralCode === l1.referredBy);
+          let l2 = finalUsers.find((u) => u.referralCode.toUpperCase() === l1.referredBy!.toUpperCase());
           if (l2) {
             const com2 = Math.round((prod.price * settings.commissionLevel2) / 100);
             l2.balance += com2;
@@ -756,11 +1105,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
               date: new Date().toISOString(),
               read: false,
             };
-            saveNotifications([notif2, ...notifications]);
+            tempNotifications = [notif2, ...tempNotifications];
 
             // Level 3
             if (l2.referredBy) {
-              let l3 = finalUsers.find((u) => u.referralCode === l2.referredBy);
+              let l3 = finalUsers.find((u) => u.referralCode.toUpperCase() === l2.referredBy!.toUpperCase());
               if (l3) {
                 const com3 = Math.round((prod.price * settings.commissionLevel3) / 100);
                 l3.balance += com3;
@@ -783,7 +1132,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
                   date: new Date().toISOString(),
                   read: false,
                 };
-                saveNotifications([notif3, ...notifications]);
+                tempNotifications = [notif3, ...tempNotifications];
               }
             }
           }
@@ -794,6 +1143,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     saveUsers(finalUsers);
     saveInvestments(newInvestmentsList);
     saveCommissions(tempCommissions);
+    saveNotifications(tempNotifications);
 
     // Purchase Notification
     addNotificationForUser(
@@ -816,7 +1166,54 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
       const nextDaysPassed = inv.daysPassed + 1;
       const finished = nextDaysPassed >= inv.durationDays;
 
-      // Only complete active investments if they belong to BIEN-ÊTRE or ACTIVITÉS categories
+      // Handle STABILITÉ investments (daily revenue payout)
+      if (inv.category === 'STABILITÉ') {
+        const dailyProfit = Math.round(inv.totalYield / inv.durationDays);
+        
+        usersCopy = usersCopy.map((u) => {
+          if (u.id === inv.userId) {
+            return {
+              ...u,
+              balance: u.balance + dailyProfit,
+              totalEarnings: u.totalEarnings + dailyProfit,
+            };
+          }
+          return u;
+        });
+
+        notifyList.push({
+          id: 'n-' + Date.now() + Math.random(),
+          userId: inv.userId,
+          title: '📈 Rendement Stabilité reçu !',
+          message: `Votre contrat Stabilité pour "${inv.productName}" vous a versé votre rendement quotidien de ${dailyProfit.toLocaleString()} FCFA (Simulé Jour ${nextDaysPassed}/${inv.durationDays}).`,
+          date: new Date().toISOString(),
+          read: false,
+        });
+
+        if (finished) {
+          notifyList.push({
+            id: 'n-' + Date.now() + Math.random() + '-end',
+            userId: inv.userId,
+            title: '🏆 Contrat Stabilité Terminé !',
+            message: `Félicitations ! Votre contrat Stabilité "${inv.productName}" est arrivé à son terme de ${inv.durationDays} jours. L'ensemble des gains quotidiens a été distribué.`,
+            date: new Date().toISOString(),
+            read: false,
+          });
+
+          return {
+            ...inv,
+            daysPassed: inv.durationDays,
+            status: 'COMPLETED' as const,
+          };
+        }
+
+        return {
+          ...inv,
+          daysPassed: nextDaysPassed,
+        };
+      }
+
+      // Only complete active investments if they belong to BIEN-ÊTRE or ACTIVITÉS categories at the end of cycle
       if (finished && inv.category !== 'STABILITÉ') {
         // Yield + Capital recovery credited automatically to user
         usersCopy = usersCopy.map((u) => {
@@ -850,7 +1247,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
 
       return {
         ...inv,
-        daysPassed: inv.category === 'STABILITÉ' && nextDaysPassed >= inv.durationDays ? inv.durationDays : nextDaysPassed,
+        daysPassed: nextDaysPassed,
       };
     });
 
@@ -1238,6 +1635,75 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
     saveReviews(reviews.filter((rev) => rev.id !== id));
   };
 
+  // Forum CRUD & Interactions
+  const addForumPost = (content: string, imageUrl?: string) => {
+    if (!currentUser) return;
+    const newPost: ForumPost = {
+      id: 'fp-' + Date.now(),
+      authorName: currentUser.fullName,
+      authorAvatar: currentUser.role === 'admin' ? '👑' : '👨‍🌾',
+      role: currentUser.role,
+      content,
+      imageUrl,
+      date: new Date().toLocaleString('fr-FR', {
+        day: 'numeric',
+        month: 'short',
+        year: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      }),
+      likes: 0,
+      likedBy: [],
+      comments: [],
+    };
+    saveForumPosts([newPost, ...forumPosts]);
+  };
+
+  const likeForumPost = (postId: string) => {
+    if (!currentUser) return;
+    const updated = forumPosts.map((post) => {
+      if (post.id === postId) {
+        const hasLiked = post.likedBy?.includes(currentUser.id);
+        const likedBy = hasLiked
+          ? post.likedBy.filter((userId) => userId !== currentUser.id)
+          : [...(post.likedBy || []), currentUser.id];
+        const likes = hasLiked ? Math.max(0, post.likes - 1) : post.likes + 1;
+        return { ...post, likes, likedBy };
+      }
+      return post;
+    });
+    saveForumPosts(updated);
+  };
+
+  const addForumComment = (postId: string, content: string) => {
+    if (!currentUser) return;
+    const updated = forumPosts.map((post) => {
+      if (post.id === postId) {
+        const newComm = {
+          id: 'fc-' + Date.now(),
+          authorName: currentUser.fullName,
+          authorAvatar: currentUser.role === 'admin' ? '👑' : '👨‍🌾',
+          content,
+          date: new Date().toLocaleString('fr-FR', {
+            day: 'numeric',
+            month: 'short',
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+          }),
+          role: currentUser.role,
+        };
+        return { ...post, comments: [...post.comments, newComm] };
+      }
+      return post;
+    });
+    saveForumPosts(updated);
+  };
+
+  const deleteForumPost = (postId: string) => {
+    saveForumPosts(forumPosts.filter((post) => post.id !== postId));
+  };
+
   // Products CRUD
   const addProduct = (p: Omit<Product, 'id'>) => {
     const newPr: Product = {
@@ -1344,6 +1810,7 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         withdrawals,
         tickets,
         reviews,
+        forumPosts,
         notifications,
         commissions,
         settings,
@@ -1376,6 +1843,11 @@ export const AppProvider: React.FC<{ children: React.ReactNode }> = ({ children 
         addReview,
         updateReview,
         deleteReview,
+
+        addForumPost,
+        likeForumPost,
+        addForumComment,
+        deleteForumPost,
 
         addProduct,
         updateProduct,
